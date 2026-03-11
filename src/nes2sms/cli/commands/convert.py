@@ -146,6 +146,7 @@ def cmd_convert(args):
                         type=sym_data.get("type", "code"),
                         comment=sym_data.get("comment", ""),
                         disassembly_snippet=sym_data.get("disassembly_snippet"),
+                        is_embedded=sym_data.get("is_embedded", False),
                     )
                 )
 

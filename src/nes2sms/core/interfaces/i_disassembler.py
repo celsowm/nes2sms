@@ -55,7 +55,7 @@ class DisassemblyDatabase:
                 return True
         return False
 
-    def get_function_at(self, addr: int, max_instructions: int = 100) -> List[ParsedInstruction]:
+    def get_function_at(self, addr: int, max_instructions: int = 1000) -> List[ParsedInstruction]:
         """Get all instructions from addr until RTS/RTI or max."""
         result = []
         current = addr

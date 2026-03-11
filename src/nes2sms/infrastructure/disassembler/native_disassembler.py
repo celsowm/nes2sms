@@ -475,6 +475,9 @@ class Native6502Disassembler(IDisassembler):
 
         # Determine addresses to disassemble
         addresses_to_process = set()
+        
+        # Branch/jump targets discovered during disassembly
+        discovered_targets = set()
 
         if code_ranges:
             # Add all addresses in code ranges
@@ -513,13 +516,24 @@ class Native6502Disassembler(IDisassembler):
             # Get mnemonic
             mnemonic = self.MNEMONICS.get(opcode, f".BYTE ${opcode:02X}")
 
-            # Get operands
+            # Get operands and check for branch targets
             operands = []
-            if size == 2 and offset + 1 < len(prg_data):
+            if mnemonic in ("BPL", "BMI", "BVC", "BVS", "BCC", "BCS", "BNE", "BEQ") and size == 2:
+                # Relative branch
+                offset = prg_data[offset + 1]
+                if offset >= 0x80:
+                    offset -= 0x100
+                target_addr = (addr + 2 + offset) & 0xFFFF
+                operands.append(f"${target_addr:04X}")
+            elif size == 2 and offset + 1 < len(prg_data):
                 operands.append(f"${prg_data[offset + 1]:02X}")
             elif size == 3 and offset + 2 < len(prg_data):
                 addr_val = prg_data[offset + 1] | (prg_data[offset + 2] << 8)
-                operands.append(f"${addr_val:04X}")
+                if mnemonic in ("JMP", "JSR"):
+                    discovered_targets.add(addr_val)
+                    operands.append(f"${addr_val:04X}")
+                else:
+                    operands.append(f"${addr_val:04X}")
 
             # Create instruction
             instr = ParsedInstruction(

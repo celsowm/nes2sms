@@ -30,6 +30,7 @@ class Symbol:
     type: str  # 'code', 'data', 'pointer'
     comment: Optional[str] = None
     disassembly_snippet: Optional[str] = None
+    is_embedded: bool = False
 
 
 @dataclass

@@ -64,6 +64,9 @@ class StubGenerator:
                 self.translator = InstructionTranslator()
         else:
             self.translator = None
+        
+        # Track all labels emitted across all snippets to ensure global uniqueness
+        self.global_seen_labels = set()
 
     def generate_game_logic_stub(self) -> str:
         """Generate game_logic.asm with translated code for each symbol."""
@@ -102,6 +105,8 @@ class StubGenerator:
             pass  # GameMain already added above
         else:
             for symbol in self.symbols:
+                if symbol.is_embedded:
+                    continue
                 stub = self._generate_stub(symbol)
                 lines.append(stub)
 
@@ -239,6 +244,27 @@ class StubGenerator:
 
         return instructions
 
+    def _deduplicate_labels(self, content: str) -> str:
+        """Remove duplicate labels across all snippets using regex."""
+        import re
+        lines = content.split("\n")
+        deduped = []
+        # Match label (optional whitespace + name + colon)
+        label_pattern = re.compile(r"^(\s*)([a-zA-Z0-9_]+):")
+        
+        for line in lines:
+            match = label_pattern.search(line)
+            if match and not line.strip().startswith(";"):
+                label_name = match.group(2)
+                if label_name in self.global_seen_labels:
+                    # Comment it out instead of removing to preserve structure
+                    indent = match.group(1)
+                    deduped.append(f"{indent}; DUPLICATE LABEL SUPPRESSED: {label_name}:")
+                    continue
+                self.global_seen_labels.add(label_name)
+            deduped.append(line)
+        return "\n".join(deduped)
+
     def write_stubs(self, output_dir: Path):
         """
         Write stub files to disk.
@@ -250,7 +276,9 @@ class StubGenerator:
         stubs_dir.mkdir(parents=True, exist_ok=True)
 
         game_logic = self.generate_game_logic_stub()
+        game_logic = self._deduplicate_labels(game_logic)
         (stubs_dir / "game_logic.asm").write_text(game_logic, encoding="utf-8")
 
         game_stubs = self.generate_game_stubs()
+        game_stubs = self._deduplicate_labels(game_stubs)
         (stubs_dir / "game_stubs.asm").write_text(game_stubs, encoding="utf-8")

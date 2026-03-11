@@ -97,16 +97,45 @@ class StaticSymbolExtractor:
         if not self.disassembly_db:
             return
 
+        if not self.disassembly_db:
+            return
+
+        # Step 1: Sync all symbol names to the disassembly database as labels
+        # This ensures get_function_at includes these labels in the snippets
         for symbol in self.symbols:
+            self.disassembly_db.add_label(symbol.address, symbol.name)
+
+        # Step 2: Process symbols in order of address to handle overlaps correctly
+        self.symbols.sort(key=lambda s: s.address)
+        processed_addresses = set()
+        emitted_labels = set()
+        
+        for symbol in self.symbols:
+            # If this starting address is already covered by a previous snippet, 
+            # we don't need to generate a new starting point for it (the label
+            # is already embedded in the parent snippet).
+            if symbol.address in processed_addresses:
+                symbol.is_embedded = True
+                continue
+                
             # Get function instructions
             instructions = self.disassembly_db.get_function_at(symbol.address)
 
             if instructions:
+                # Mark all these addresses as covered
+                for instr in instructions:
+                    for i in range(instr.size()):
+                        processed_addresses.add(instr.address + i)
+                    
                 # Convert to assembly text
                 lines = []
                 for instr in instructions:
-                    if instr.label:
-                        lines.append(f"{instr.label}:")
+                    # Check for label at this address in the DB (includes our symbols)
+                    label = self.disassembly_db.get_label_at(instr.address)
+                    if label and label not in emitted_labels:
+                        lines.append(f"{label}:")
+                        emitted_labels.add(label)
+                    
                     line = instr.to_string()
                     if instr.comment:
                         line += f" ; {instr.comment}"
@@ -598,6 +627,7 @@ class StaticSymbolExtractor:
                     "type": s.type,
                     "comment": s.comment or "",
                     "disassembly_snippet": s.disassembly_snippet or "",
+                    "is_embedded": s.is_embedded,
                 }
                 for s in self.symbols
             ],

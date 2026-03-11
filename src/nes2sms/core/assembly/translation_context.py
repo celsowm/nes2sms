@@ -73,8 +73,11 @@ class TranslationContext:
         self.translated_code.append(f"; {comment}")
 
     def add_label(self, label: str):
-        """Add label."""
-        self.translated_code.append(f"{label}:")
+        """Add label, avoiding consecutive duplicates."""
+        label_text = f"{label}:"
+        if self.translated_code and self.translated_code[-1] == label_text:
+            return
+        self.translated_code.append(label_text)
 
     def get_code(self) -> str:
         """Get all translated code as string."""

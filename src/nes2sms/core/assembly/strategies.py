@@ -41,8 +41,6 @@ def _normalize_hex(text: Optional[str]) -> str:
             return text
         if val <= 0xFF:
             return f"{val:02X}h"
-        elif val <= 0x1FFF:
-            return f"{val & 0xFF:02X}h"
         else:
             return f"{val:04X}h"
     return text

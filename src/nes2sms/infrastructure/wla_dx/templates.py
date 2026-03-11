@@ -174,27 +174,29 @@ HAL_VDP_ASM = """
 .define VDP_CTRL_PORT   $BF
 
 VDP_Init:
+    ; Register 0: Mode 4, Enable line interrupts
     ld   a, 0
-    ld   b, %00000000
+    ld   b, %00000110
     call VDP_WriteReg
+    ; Register 1: Mode 4, 192 lines, Enable display, Enable frame interrupts
     ld   a, 1
-    ld   b, %00000000
+    ld   b, %01100000
     call VDP_WriteReg
+    ; Register 2: Name Table Base Address ($3800)
     ld   a, 2
-    ld   b, %11000000
-    call VDP_WriteReg
-    ld   a, 5
-    ld   b, %11111110
+    ld   b, %11101110
     call VDP_WriteReg
     ret
 
 VDP_WriteReg:
-    ld   c, VDP_CTRL_PORT
-    ld   a, %10000000
-    or   a
-    out  (c), a
+    ; A = Register index
+    ; B = Data value
+    push af
     ld   a, b
-    out  (c), a
+    out  (VDP_CTRL_PORT), a ; First byte: Data
+    pop  af
+    or   %10000000          ; Second byte: Register Index | $80
+    out  (VDP_CTRL_PORT), a
     ret
 
 VDP_SetWriteAddress:
