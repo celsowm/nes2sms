@@ -195,6 +195,19 @@ TilemapData:
     .incbin "assets/tilemap.bin"
 TilemapData_END:
 
+; LoadSAT: Initialize SAT at VRAM $3F00
+LoadSAT:
+    ld   a, $00
+    out  ($BF), a
+    ld   a, $7F                 ; $3F | $40 = $7F (write to $3F00)
+    out  ($BF), a
+    ld   a, $D0
+    ld   b, 64
+.sat_loop:
+    out  ($BE), a
+    djnz .sat_loop
+    ret
+
 .ends
 
 ; ============================================================
@@ -222,18 +235,6 @@ TilesData:
     .incbin "assets/tiles.bin"
 TilesData_END:
 
-LoadSAT:
-    ld   a, $00
-    out  ($BF), a
-    ld   a, $40 | $3F
-    out  ($BF), a
-    ld   a, $D0
-    ld   b, 64
-.sat_loop:
-    out  ($BE), a
-    djnz .sat_loop
-    ret
-
 .ends
 """
 
@@ -242,25 +243,31 @@ INIT_ASM = """; SMS Z80 Initialization
 ; Reference: SKILL.md § Step 4 — Generate Z80 Project Scaffold
 
 .bank 0 slot 0
-; .org $0000 is redundant with slot 0
+.org $0000
 
 ; ============================================================
-; RESET VECTOR — entry point after power on
+; Entry point — jump past the INT and NMI vectors
 ; ============================================================
+    di
+    im 1
+    jp   RESET
+
+; ============================================================
+; RESET — runs after vectors are safely placed
+; ============================================================
+.org $0070
 RESET:
-    di                          ; disable interrupts
-    im 1                        ; interrupt mode 1: INT → $0038
     ld   sp, $DFF0              ; stack top (SMS RAM safe zone)
 
     ; Initialize hardware
-    call VDP_Init               ; configure VDP registers
+    call VDP_Init               ; configure VDP registers (display OFF)
     call PSG_Init               ; silence all PSG channels
     call ClearVRAM              ; zero 16 KB VRAM
 
-    ; Map asset banks
-    ld   a, 2                   ; Bank 2: Palettes + Tilemap
+    ; Map asset banks and load data
+    ld   a, 2                   ; Bank 2: Palettes + Tilemap + SAT
     ld   ($FFFF), a             ; Map to Slot 2 ($8000)
-    
+
     call LoadPalettes
     call LoadTilemap
     call LoadSAT
@@ -269,10 +276,10 @@ RESET:
     ld   ($FFFF), a             ; Map to Slot 2 ($8000)
     call LoadTiles
 
-    ; Enable display and interrupts
-    ld   a, %01100100           ; VDP Reg1: display enable + VBlank IRQ
-    ld   b, 1
-    call VDP_SetRegister
+    ; Enable display AFTER all assets are loaded
+    ld   a, 1                   ; VDP Register 1
+    ld   b, %11100000           ; display ON, VBlank IRQ ON
+    call VDP_WriteReg
     ei
 
     ; Jump to ported game entry point
@@ -343,15 +350,14 @@ HAL_VDP_ASM = """; SMS VDP Hardware Abstraction Layer
 ;   read $2002 (PPUSTATUS) → in a, ($BF)
 
 .section "VDP_HAL" FREE
-; VDP_SetRegister: A = register number (0–10), B = value
+; VDP_SetRegister: A = register number (0-10), B = value
 VDP_SetRegister:
+    push af
     ld   c, $BF
-    out  (c), b                 ; data byte
-    ld   a, %10000000
-    or   c                      ; set register write flag
-    ; NOTE: C already = $BF, so A = $BF | $80 — correct for reg <= 15
-    ; Actually: A = $80 | reg_num. Caller must ensure A = reg before call.
-    ; Recommended: inline helper below.
+    out  (c), b                 ; value byte first
+    pop  af
+    or   $80                    ; register command bit
+    out  (c), a                 ; register select
     ret
 
 ; VDP_WriteReg: write value V to VDP register N
@@ -383,13 +389,13 @@ VDP_Init:
     ret
 
 VDP_INIT_TABLE:
-    .db %00000100               ; Reg 0: Mode 4, no left column blank, line IRQ off
-    .db %01100100               ; Reg 1: display on, VBlank IRQ on, 8x8 sprites
-    .db %11111111 & (($3800 >> 10) << 1 | 1)  ; Reg 2: name table at $3800
-    .db $FF                     ; Reg 3: (ignored in Mode 4)
-    .db $FF                     ; Reg 4: (ignored in Mode 4)
-    .db %11111111 & (($3F00 >> 7) << 1 | 1)   ; Reg 5: SAT at $3F00
-    .db %11111011               ; Reg 6: sprite tiles from $0000
+    .db %00100110               ; Reg 0: Mode 4 ON (bit 2), no extra features
+    .db %10100000               ; Reg 1: display OFF, VBlank IRQ OFF initially
+    .db $FF                     ; Reg 2: name table at $3800
+    .db $FF                     ; Reg 3: (ignored in Mode 4, must be $FF)
+    .db $FF                     ; Reg 4: (ignored in Mode 4, must be $FF)
+    .db $FF                     ; Reg 5: SAT at $3F00
+    .db $FB                     ; Reg 6: sprite tiles from $0000
     .db $00                     ; Reg 7: border color index 0
     .db $00                     ; Reg 8: X scroll = 0
     .db $00                     ; Reg 9: Y scroll = 0
