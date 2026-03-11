@@ -217,24 +217,35 @@ def convert_chr_bank(chr_data: bytes, color_maps: list, flip_strategy: str):
     """
     n_tiles = len(chr_data) // 16
     sms_tiles = []
+    tile_to_id = {}  # bytes -> id
     flip_index = {}
     warnings = []
+
+    def get_or_add_tile(tile_bytes):
+        if tile_bytes in tile_to_id:
+            return tile_to_id[tile_bytes]
+        new_id = len(sms_tiles)
+        sms_tiles.append(tile_bytes)
+        tile_to_id[tile_bytes] = new_id
+        return new_id
 
     for tile_id in range(n_tiles):
         chr16 = chr_data[tile_id * 16:(tile_id + 1) * 16]
         for pal_id, cm in enumerate(color_maps):
             sms_tile = nes_tile_to_sms(chr16, cm)
-            sms_id = len(sms_tiles)
-            sms_tiles.append(sms_tile)
+            
+            sms_id = get_or_add_tile(sms_tile)
             flip_index[(tile_id, pal_id, 0)] = sms_id  # no flip
 
             if flip_strategy == 'cache':
                 h_tile = flip_tile_h(sms_tile)
                 v_tile = flip_tile_v(sms_tile)
                 hv_tile = flip_tile_v(h_tile)
-                flip_index[(tile_id, pal_id, 1)] = len(sms_tiles); sms_tiles.append(h_tile)
-                flip_index[(tile_id, pal_id, 2)] = len(sms_tiles); sms_tiles.append(v_tile)
-                flip_index[(tile_id, pal_id, 3)] = len(sms_tiles); sms_tiles.append(hv_tile)
+                flip_index[(tile_id, pal_id, 1)] = get_or_add_tile(h_tile)
+                flip_index[(tile_id, pal_id, 2)] = get_or_add_tile(v_tile)
+                flip_index[(tile_id, pal_id, 3)] = get_or_add_tile(hv_tile)
+
+    print(f"[convert-gfx] De-duped tiles: {n_tiles * len(color_maps) * (4 if flip_strategy == 'cache' else 1)} raw -> {len(sms_tiles)} unique")
 
     total_vram = len(sms_tiles) * 32
     if total_vram > 14336:  # $3800 - $0000 = 14 KB safe tile area
@@ -416,7 +427,7 @@ def cmd_ingest(args):
     sms_manifest = build_sms_manifest(nes_manifest, hdr, vectors,
                                       len(chr_) // 16 if chr_ else 0, [])
     sms_manifest['source_hash_sha256'] = sha
-    (out / 'manifest_sms.json').write_text(json.dumps(sms_manifest, indent=2))
+    (out / 'manifest_sms.json').write_text(json.dumps(sms_manifest, indent=2), encoding='utf-8')
 
     print(f"[ingest] OK — PRG {len(prg)//1024}KB | CHR {len(chr_)//1024}KB "
           f"| mapper {hdr['mapper']} | vectors {vectors}")
@@ -458,7 +469,7 @@ def cmd_convert_gfx(args):
 
     # Write flip index as JSON for stub generator
     serializable_flip = {str(k): v for k, v in flip_index.items()}
-    (out / 'flip_index.json').write_text(json.dumps(serializable_flip, indent=2))
+    (out / 'flip_index.json').write_text(json.dumps(serializable_flip, indent=2), encoding='utf-8')
 
     for w in warnings:
         print(f"[convert-gfx] WARNING: {w}")
@@ -492,9 +503,9 @@ def cmd_convert_audio(args):
               f"DMC will be DROPPED (strategy='{strategy}'). "
               f"See conversion_report.md for details.")
 
-    (out / 'events.json').write_text(json.dumps(events, indent=2))
+    (out / 'events.json').write_text(json.dumps(events, indent=2), encoding='utf-8')
     psg_asm = build_psg_data_asm(events, strategy)
-    (out / 'psg_data.asm').write_text(psg_asm)
+    (out / 'psg_data.asm').write_text(psg_asm, encoding='utf-8')
 
     print(f"[convert-audio] Wrote events.json ({len(events)} events) "
           f"and psg_data.asm to {out}/")
@@ -546,9 +557,66 @@ def cmd_report(args):
         '- [ ] Test in Emulicious / MEKA',
     ]
 
-    (out / 'conversion_report.md').write_text('\n'.join(lines))
+    (out / 'conversion_report.md').write_text('\n'.join(lines), encoding='utf-8')
     print(f"[report] Wrote conversion_report.md to {out}/")
 
+
+def cmd_analyze_mapper(args):
+    manifest_path = Path(args.manifest)
+    if not manifest_path.exists():
+        print(f"ERROR: {manifest_path} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    manifest = json.loads(manifest_path.read_text())
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    nes_hdr = manifest.get('nes_header', {})
+    mapper = nes_hdr.get('mapper', -1)
+    prg_size = nes_hdr.get('prg_size', 0)
+    prg_banks = prg_size // 16384
+
+    # Generate banks.json logically mapping NES PRG to SMS Sega Mapper Slots
+    banks = {
+        'mapper_id': mapper,
+        'prg_size_kb': prg_size // 1024,
+        'slots': []
+    }
+
+    if mapper == 0 or mapper == 3:  # NROM / CNROM (Fixed PRG)
+        banks['strategy'] = 'linear'
+        for i in range(prg_banks):
+            banks['slots'].append({'sms_bank': i, 'nes_bank': i, 'fixed': True})
+    elif mapper == 1:  # MMC1
+        banks['strategy'] = 'sega_mapper'
+        for i in range(prg_banks):
+            banks['slots'].append({'sms_bank': i, 'nes_bank': i, 'fixed': (i == prg_banks - 1)})
+    elif mapper == 2:  # UxROM
+        banks['strategy'] = 'sega_mapper'
+        for i in range(prg_banks):
+            # UXRom: last bank is fixed to $C000-$FFFF, but SMS needs it at $0000-$3FFF (slot 0) along with vectors.
+            # We map NES last bank (vectors) to SMS slot 0.
+            # NES bank i to SMS bank i.
+            banks['slots'].append({'sms_bank': i, 'nes_bank': i, 'fixed': (i == prg_banks - 1)})
+    elif mapper == 4:  # MMC3
+        banks['strategy'] = 'mmc3_advanced'
+        for i in range(prg_banks):
+            banks['slots'].append({'sms_bank': i, 'nes_bank': i, 'fixed': False})
+        manifest.setdefault('warnings', []).append('MMC3 bank switching requires advanced Z80 interrupt translations.')
+    else:
+        banks['strategy'] = 'unsupported'
+        manifest.setdefault('warnings', []).append(f'Unsupported mapper {mapper}. Generated flat export.')
+        for i in range(prg_banks):
+            banks['slots'].append({'sms_bank': i, 'nes_bank': i, 'fixed': False})
+
+    (out / 'banks.json').write_text(json.dumps(banks, indent=2), encoding='utf-8')
+
+    if 'conversion_state' in manifest:
+        manifest['conversion_state']['analyze_mapper'] = 'DONE'
+
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    
+    print(f"[analyze-mapper] Mapper {mapper} detected. Wrote {len(banks['slots'])} banks to banks.json.")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -591,9 +659,7 @@ def main():
     elif args.cmd == 'convert-audio':
         cmd_convert_audio(args)
     elif args.cmd == 'analyze-mapper':
-        print("[analyze-mapper] Reads manifest_sms.json and produces banks.json.")
-        print("  See SKILL.md § Step 1 for the full mapper analysis procedure.")
-        print("  Supported mappers: NROM(0), UxROM(2), CNROM(3), MMC1(1), MMC3(4).")
+        cmd_analyze_mapper(args)
     elif args.cmd == 'report':
         cmd_report(args)
     else:
