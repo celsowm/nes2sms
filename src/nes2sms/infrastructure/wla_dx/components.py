@@ -1,16 +1,35 @@
-from . import IHalComponent
+"""WLA-DX HAL components."""
+
 import textwrap
+from abc import ABC, abstractmethod
+
+
+class IHalComponent(ABC):
+    """Base interface for HAL components."""
+
+    @abstractmethod
+    def get_asm(self) -> str:
+        """Return the assembly code for the component."""
+        pass
+
 
 class VirtualPpuWlaDx(IHalComponent):
-    """
-    Generates the Virtual PPU tracking state and $2000-$2007 register simulations for WLA-DX.
-    """
+    """Generates Virtual PPU and $2000-$2007 register simulations."""
+
     def get_asm(self) -> str:
-        return self._ppu_ram_def() + "\n" + self._vdp_core() + "\n" + self._ppu_io() + "\n" + self._oam_dma()
+        return (
+            self._ppu_ram_def()
+            + "\n"
+            + self._vdp_core()
+            + "\n"
+            + self._ppu_io()
+            + "\n"
+            + self._oam_dma()
+        )
 
     def _ppu_ram_def(self) -> str:
         return textwrap.dedent("""; Virtual PPU State Variables (RAM C000+)
-        .ramsection \"PPU_STATE_RAM\" slot 2
+        .ramsection "PPU_STATE_RAM" slot 3
             PPU_CTRL      db    ; $2000 emulation
             PPU_MASK      db    ; $2001 emulation
             PPU_STATUS    db    ; $2002 emulation (bit 7 = VBlank)
@@ -21,12 +40,13 @@ class VirtualPpuWlaDx(IHalComponent):
             PPU_ADDR_L    db    ; $2006 low byte
             PPU_DATA_BUF  db    ; dummy buffer for $2007 reads
             OAM_ADD       db    ; $2003 addr
+            PPU_V_OFFSET  db    ; Vertical letterbox offset (default 24 for centering)
         .ends
         """)
 
     def _vdp_core(self) -> str:
         return textwrap.dedent("""; SMS VDP Core Utils
-        .section \"VDP_CORE\" FREE
+        .section "VDP_CORE" FREE
         
         VDP_SetRegister:
             push af
@@ -47,6 +67,9 @@ class VirtualPpuWlaDx(IHalComponent):
             ret
             
         VDP_Init:
+            ld   a, 24
+            ld   (PPU_V_OFFSET), a      ; Default 24 centers 192px viewport in 240px
+            
             ld   b, VDP_INIT_TABLE_END - VDP_INIT_TABLE
             ld   hl, VDP_INIT_TABLE
             ld   e, 0                   ; register index
@@ -96,37 +119,31 @@ class VirtualPpuWlaDx(IHalComponent):
 
     def _ppu_io(self) -> str:
         return textwrap.dedent("""; Emulated NES PPU I/O ($2000 - $2007)
-        .section \"PPU_IO\" FREE
+        .section "PPU_IO" FREE
         
         ; $2000 PPUCTRL
         NES_Write2000:
             ld   (PPU_CTRL), a
-            ; Extrair base do nametable e sprite size (TODO futuramente)
             ret
             
         ; $2001 PPUMASK
         NES_Write2001:
             ld   (PPU_MASK), a
-            ; Controla display ON/OFF traduzindo para VDP Reg 1
-            ; Simplificado: se (A & $18), liga o Reg 1
             ret
             
         ; $2002 PPUSTATUS
         NES_Read2002:
-            in   a, ($BF)               ; Ler limpa interrupt do VDP nativo
-            ld   b, a                   ; Fazer backup para caso precise processar bit 5 ou 6
+            in   a, ($BF)               ; Read clears native VDP interrupt
+            ld   b, a
             ld   a, (PPU_STATUS)
             
-            ; Limpar W _após_ ler
             push af
             xor  a
             ld   (PPU_W_LATCH), a
-            ; Limpar VBlank no status
             ld   a, (PPU_STATUS)
             and  %01111111
             ld   (PPU_STATUS), a
-            
-            pop  af                     ; retorna o valor COM VBlank setado (se estivesse) no A
+            pop  af
             ret
             
         ; $2005 PPUSCROLL
@@ -141,18 +158,25 @@ class VirtualPpuWlaDx(IHalComponent):
             ld   (PPU_SCROLL_X), a
             ld   a, 1
             ld   (PPU_W_LATCH), a
-            ; Inverter scroll para SMS
+            ; Invert scroll for SMS: SMS_X = 256 - NES_X
             ld   a, 0
             sub  b
             call VDP_SetScrollX
             pop  bc
             ret
         .second_write:
-            ld   a, b
-            ld   (PPU_SCROLL_Y), a
             xor  a
             ld   (PPU_W_LATCH), a
+            
+            ; SMS_Y = (NES_Y - PPU_V_OFFSET) % 224
             ld   a, b
+            ld   c, a
+            ld   a, (PPU_V_OFFSET)
+            ld   b, a
+            ld   a, c
+            sub  b
+            
+            ; TODO: Ensure modulo 224 for stable wrap if needed
             call VDP_SetScrollY
             pop  bc
             ret
@@ -187,12 +211,9 @@ class VirtualPpuWlaDx(IHalComponent):
             ld   (PPU_ADDR_L), a
             xor  a
             ld   (PPU_W_LATCH), a
-            ; Configurar write addr do VDP usando o H e L combinados
             ld   a, b
             out  ($BF), a
             ld   a, (PPU_ADDR_H)
-            ; Necessário transladar de $2000 NES -> $3800 SMS nametable ou CHR RAM
-            ; Simplifição (assume VRAM direta por enquanto)
             or   $40
             out  ($BF), a
             pop  bc
@@ -201,12 +222,9 @@ class VirtualPpuWlaDx(IHalComponent):
         ; $2007 PPUDATA
         NES_Write2007:
             out  ($BE), a
-            ; Incrementar PPU_ADDR (TODO: base PPU_CTRL bit 2: +1 ou +32)
             ret
             
-        ; $2007 Ler
         NES_Read2007:
-            ; Delay de 1 read (TODO)
              in  a, ($BE)
              ret
              
@@ -214,60 +232,54 @@ class VirtualPpuWlaDx(IHalComponent):
         """)
 
     def _oam_dma(self) -> str:
-        return textwrap.dedent("""; OAM DMA ($4014) para VDP SAT
-        .section \"OAM_DMA\" FREE
+        return textwrap.dedent("""; OAM DMA ($4014) for VDP SAT
+        .section "OAM_DMA" FREE
         
-        ; $4014 OAMDMA
-        ; Entrada: A = High byte of memory page (e.g., $02)
         NES_Write4014:
             push hl
             push de
             push bc
             push af
             
-            ; 1. Set VDP write address para SAT Y Table ($3F00)
             ld   a, $00
             out  ($BF), a
-            ld   a, $7F                 ; $3F | $40
+            ld   a, $7F
             out  ($BF), a
             
-            ; Preparar loop leitura página ram
-            pop  af                     ; Recupera hi byte RAM
+            pop  af
             ld   h, a
-            ld   l, $00                 ; HL = $yy00 (início sprites NES)
-            ld   b, 64                  ; 64 sprites
+            ld   l, $00
+            ld   b, 64
             
-            ; 2. Copiar Y coordinates (cada 4 bytes do NES)
             push hl
         .loop_y:
-            ld   a, (hl)                ; Ler Y NES
-            inc  a                      ; SMS Y = NES Y + 1 (evita clipping)
-            out  ($BE), a               ; Salva ST Y
+            ld   a, (hl)
+            inc  a
+            out  ($BE), a
             inc  hl
             inc  hl
             inc  hl
-            inc  hl                     ; Pular Pulo Index, Attr, X
+            inc  hl
             djnz .loop_y
             
-            ; 3. Copiar X e Tile Index ($3F40)
             ld   a, $40
             out  ($BF), a
             ld   a, $7F
             out  ($BF), a
             
-            pop  hl                     ; Volta início ram sprites
+            pop  hl
             ld   b, 64
         .loop_xt:
-            inc  hl                     ; Pula Y
-            ld   a, (hl)                ; Ler Tile Index
-            ld   e, a                   ; Salva em E
-            inc  hl                     ; Pula Tile Index
-            inc  hl                     ; Pula Attr (ignora flip/palette agora)
-            ld   a, (hl)                ; Ler X
-            out  ($BE), a               ; Escreve X (SMS VDP usa X dps Tile)
+            inc  hl
+            ld   a, (hl)
+            ld   e, a
+            inc  hl
+            inc  hl
+            ld   a, (hl)
+            out  ($BE), a
             ld   a, e
-            out  ($BE), a               ; Escreve Tile Index nativo
-            inc  hl                     ; Proximo sprite
+            out  ($BE), a
+            inc  hl
             djnz .loop_xt
             
             pop  bc
@@ -276,4 +288,109 @@ class VirtualPpuWlaDx(IHalComponent):
             ret
             
         .ends
-        \"\"\")
+        """)
+
+
+class WlaDxInputHal(IHalComponent):
+    """Generates SMS Input HAL."""
+
+    def get_asm(self) -> str:
+        return textwrap.dedent("""; SMS Input HAL
+        .section "Input_HAL" FREE
+        
+        Input_ReadJoypad1:
+            in   a, ($DC)
+            cpl
+            and  $3F
+            ret
+            
+        .define INPUT_UP    %00000001
+        .define INPUT_DOWN  %00000010
+        .define INPUT_LEFT  %00000100
+        .define INPUT_RIGHT %00001000
+        .define INPUT_BTN1  %00010000
+        .define INPUT_BTN2  %00100000
+        
+        .ends
+        """)
+
+
+class WlaDxPsgHal(IHalComponent):
+    """Generates SMS PSG HAL."""
+
+    def get_asm(self) -> str:
+        return textwrap.dedent("""; SMS PSG (SN76489) HAL
+        .section "PSG_HAL" FREE
+        
+        PSG_PORT .equ $7F
+        
+        PSG_Init:
+            ld   a, %10011111
+            out  (PSG_PORT), a
+            ld   a, %10111111
+            out  (PSG_PORT), a
+            ld   a, %11011111
+            out  (PSG_PORT), a
+            ld   a, %11111111
+            out  (PSG_PORT), a
+            ret
+            
+        PSG_SetTone:
+            ld   a, h
+            and  $03
+            ld   a, l
+            and  $0F
+            ld   b, a
+            ld   a, d
+            rlca \ rlca \ rlca \ rlca \ rlca
+            or   %10000000
+            or   b
+            out  (PSG_PORT), a
+            ld   a, l
+            rlca \ rlca \ rlca \ rlca
+            or   h
+            and  $3F
+            out  (PSG_PORT), a
+            ret
+            
+        PSG_SetVolume:
+            ld   a, d
+            rlca \ rlca \ rlca \ rlca \ rlca
+            or   %10010000
+            ld   b, a
+            ld   a, e
+            and  $0F
+            or   b
+            out  (PSG_PORT), a
+            ret
+            
+        .ends
+        """)
+
+
+class WlaDxMapperHal(IHalComponent):
+    """Generates SMS Sega Mapper HAL."""
+
+    def get_asm(self) -> str:
+        return textwrap.dedent("""; SMS Sega Mapper HAL
+        .section "Mapper_HAL" FREE
+        
+        Mapper_Init:
+            ld   a, 0
+            ld   ($FFFD), a
+            ld   a, 1
+            ld   ($FFFE), a
+            ld   a, 2
+            ld   ($FFFF), a
+            ret
+            
+        Mapper_SetSlot1:
+            ld   ($FFFE), a
+            ret
+            
+        Mapper_SetSlot2:
+            ld   ($FFFF), a
+            ret
+            
+        .ends
+        """)

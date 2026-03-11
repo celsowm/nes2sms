@@ -3,16 +3,18 @@
 from pathlib import Path
 from typing import Dict, List
 
+from .components import (
+    VirtualPpuWlaDx,
+    WlaDxInputHal,
+    WlaDxPsgHal,
+    WlaDxMapperHal,
+)
 from .templates import (
     MAIN_ASM,
     MEMORY_INC,
     INIT_ASM,
     INTERRUPTS_ASM,
     ASSETS_ASM,
-    HAL_VDP_ASM,
-    HAL_PSG_ASM,
-    HAL_INPUT_ASM,
-    HAL_MAPPER_ASM,
     GAME_LOGIC_STUB,
     GAME_STUBS_EMPTY,
     MAKEFILE_CONTENT,
@@ -32,6 +34,13 @@ class WlaDxGenerator:
         """
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Components for HAL generation
+        self.components = [
+            VirtualPpuWlaDx(),
+            WlaDxPsgHal(),
+            WlaDxInputHal(),
+            WlaDxMapperHal(),
+        ]
 
     def generate(self, rom_banks: int = 12, assets_dir: Path = None):
         """
@@ -61,18 +70,18 @@ class WlaDxGenerator:
             ASSETS_ASM.format(banks=rom_banks), encoding="utf-8"
         )
 
-        # Write HAL files
+        # Write HAL files using modular components
         (self.output_dir / "hal" / "vdp.asm").write_text(
-            HAL_VDP_ASM.format(banks=rom_banks), encoding="utf-8"
+            self.components[0].get_asm(), encoding="utf-8"
         )
         (self.output_dir / "hal" / "psg.asm").write_text(
-            HAL_PSG_ASM.format(banks=rom_banks), encoding="utf-8"
+            self.components[1].get_asm(), encoding="utf-8"
         )
         (self.output_dir / "hal" / "input.asm").write_text(
-            HAL_INPUT_ASM.format(banks=rom_banks), encoding="utf-8"
+            self.components[2].get_asm(), encoding="utf-8"
         )
         (self.output_dir / "hal" / "mapper.asm").write_text(
-            HAL_MAPPER_ASM.format(banks=rom_banks), encoding="utf-8"
+            self.components[3].get_asm(), encoding="utf-8"
         )
 
         # Write stubs
@@ -100,6 +109,7 @@ class WlaDxGenerator:
 
         # Write Makefile
         (self.output_dir / "Makefile").write_text(MAKEFILE_CONTENT, encoding="utf-8")
+
 
         # Copy assets if provided
         if assets_dir and assets_dir.exists():
