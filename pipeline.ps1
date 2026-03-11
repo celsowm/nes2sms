@@ -11,53 +11,55 @@ Write-Host "=== NES2SMS Pipeline ===" -ForegroundColor Cyan
 # Setup command
 $nes2sms = "nes2sms"
 
-# Step 1: Ingest
-Write-Host "`n[1/6] Ingesting ROM: $Rom" -ForegroundColor Cyan
-& $nes2sms ingest --nes $Rom --out $OutDir
+# Step 1: One-step conversion + build (official flow)
+Write-Host "`n[1/2] Running one-step convert --build..." -ForegroundColor Cyan
+$convertArgs = @("convert", "--nes", $Rom, "--out", $OutDir, "--build")
+if ($Run) {
+    $convertArgs += "--run"
+}
+& $nes2sms @convertArgs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n=== ERROR ===" -ForegroundColor Red
+    Write-Host "Conversion failed with exit code $LASTEXITCODE" -ForegroundColor Red
+    exit $LASTEXITCODE
+}
 
-# Step 2: Analyze Mapper
-Write-Host "`n[2/6] Analyzing mapper..." -ForegroundColor Cyan
-& $nes2sms analyze-mapper --manifest "$OutDir/work/manifest_sms.json" --out "$OutDir/work"
+# Step 2: Validate generated project is not using critical placeholders
+Write-Host "`n[2/2] Validating generated assets loader..." -ForegroundColor Cyan
+$assetsAsmPath = Join-Path $OutDir "build/assets.asm"
+if (!(Test-Path $assetsAsmPath)) {
+    Write-Host "`n=== ERROR ===" -ForegroundColor Red
+    Write-Host "Generated assets.asm not found: $assetsAsmPath" -ForegroundColor Red
+    exit 1
+}
 
-# Step 3: Convert Graphics
-Write-Host "`n[3/6] Converting graphics..." -ForegroundColor Cyan
-& $nes2sms convert-gfx `
-    --chr "$OutDir/work/chr.bin" `
-    --prg "$OutDir/work/prg.bin" `
-    --out "$OutDir/assets"
+$assetsAsm = Get-Content -Path $assetsAsmPath -Raw
+$placeholderChecks = @(
+    @{ Name = "LoadPalettes"; Pattern = "(?ms)^\s*LoadPalettes:\s*ret\b" },
+    @{ Name = "LoadTiles"; Pattern = "(?ms)^\s*LoadTiles:\s*ret\b" }
+)
 
-# Step 4: Convert Audio
-Write-Host "`n[4/6] Converting audio..." -ForegroundColor Cyan
-& $nes2sms convert-audio `
-    --prg "$OutDir/work/prg.bin" `
-    --out "$OutDir/assets/audio"
+$failedChecks = @()
+foreach ($check in $placeholderChecks) {
+    if ($assetsAsm -match $check.Pattern) {
+        $failedChecks += $check.Name
+    }
+}
 
-# Step 5: Generate Project
-Write-Host "`n[5/6] Generating WLA-DX project..." -ForegroundColor Cyan
-& $nes2sms generate `
-    --manifest "$OutDir/work/manifest_sms.json" `
-    --assets "$OutDir/assets" `
-    --out "$OutDir/build"
-
-# Step 6: Build
-Write-Host "`n[6/6] Building ROM..." -ForegroundColor Cyan
-& $nes2sms build --dir "$OutDir/build"
+if ($failedChecks.Count -gt 0) {
+    Write-Host "`n=== ERROR ===" -ForegroundColor Red
+    Write-Host "Critical placeholders detected in generated assets loader: $($failedChecks -join ', ')" -ForegroundColor Red
+    Write-Host "Expected non-placeholder implementations to load palettes/tiles into VRAM." -ForegroundColor Yellow
+    exit 1
+}
 
 # Check if ROM was created
 $romPath = "$OutDir/build/game.sms"
 if (Test-Path $romPath) {
     Write-Host "`n=== SUCCESS ===" -ForegroundColor Green
     Write-Host "ROM created: $romPath" -ForegroundColor Green
-    
     if ($Run) {
-        $emulatorPath = "$PSScriptRoot\emulators\blastem\blastem.exe"
-        if (Test-Path $emulatorPath) {
-            Write-Host "`nLaunching BlastEm..." -ForegroundColor Cyan
-            Start-Process $emulatorPath -ArgumentList "`"$romPath`""
-        }
-        else {
-            Write-Host "`nEmulator not found. Run .\download_emulator.ps1 first." -ForegroundColor Yellow
-        }
+        Write-Host "Emulator launch was requested and handled by 'nes2sms convert --run'." -ForegroundColor Green
     }
 }
 else {

@@ -47,19 +47,19 @@ _ppu_jump_table:
     .dw _ppu_2004, _ppu_2005, _ppu_2006, _ppu_2007
 
 _ppu_2000: ; PPUCTRL
-    out ($bf), a
+    ; Keep bootstrap display stable: translated writes are ignored for now.
     ret
 
 _ppu_2005: ; PPUSCROLL
-    out ($be), a ; SMS only has one scroll reg for X/Y? No, it's complex.
+    ; TODO: Map NES scroll semantics to SMS VDP regs 8/9.
     ret
 
 _ppu_2006: ; PPUADDR
-    out ($bf), a
+    ; TODO: Implement address latch compatibility with NES $2006.
     ret
 
 _ppu_2007: ; PPUDATA
-    out ($be), a
+    ; Prevent translated reset code from clobbering bootstrap tilemap.
     ret
 
 _ppu_2001: ; PPUMASK
@@ -69,7 +69,8 @@ _ppu_2004: ; OAMDATA
     ret
 
 hal_ppu_read:
-    in   a, ($bf)
+    ; Return clear status by default to avoid dead loops on incomplete translation.
+    xor  a
     ret
 """
 

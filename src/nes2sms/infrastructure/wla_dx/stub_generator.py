@@ -76,30 +76,31 @@ class StubGenerator:
             "",
         ]
 
-        # Always generate GameMain entry point
         symbol_names = {s.name for s in self.symbols}
-        if "GameMain" not in symbol_names:
+
+        # Always generate GameMain entry point under converter control.
+        lines.extend(
+            [
+                "; Entry point called by init.asm",
+                "GameMain:",
+            ]
+        )
+
+        entry_target = self._find_reset_entry_target(symbol_names)
+        if entry_target:
+            lines.append(f"    jp   {entry_target}")
+        else:
             lines.extend(
                 [
-                    "; Entry point called by init.asm",
-                    "GameMain:",
+                    "    ; TODO: Initialize game state",
+                    "    ; call InitGame",
+                    "",
+                    ".main_loop:",
+                    "    halt",
+                    "    jr   .main_loop",
                 ]
             )
-            
-            if "RESET_Handler" in symbol_names:
-                lines.append("    jp   RESET_Handler")
-            else:
-                lines.extend(
-                    [
-                        "    ; TODO: Initialize game state",
-                        "    ; call InitGame",
-                        "",
-                        ".main_loop:",
-                        "    halt",
-                        "    jr   .main_loop",
-                    ]
-                )
-            lines.append("")
+        lines.append("")
 
         if not self.symbols:
             pass  # GameMain already added above
@@ -107,11 +108,35 @@ class StubGenerator:
             for symbol in self.symbols:
                 if symbol.is_embedded:
                     continue
+                if symbol.name == "GameMain":
+                    continue
                 stub = self._generate_stub(symbol)
                 lines.append(stub)
 
         lines.append("")
         return "\n".join(lines)
+
+    def _find_reset_entry_target(self, symbol_names: set) -> Optional[str]:
+        """Pick the best translated routine to boot the game."""
+        preferred_labels = (
+            "RESET_Handler",
+            "Reset_Handler",
+            "reset_handler",
+            "RESET",
+            "Reset",
+            "START",
+            "Start",
+            "start",
+        )
+        for label in preferred_labels:
+            if label in symbol_names:
+                return label
+
+        for symbol in self.symbols:
+            if symbol.comment and "reset vector handler" in symbol.comment.lower():
+                return symbol.name
+
+        return None
 
     def generate_game_stubs(self) -> str:
         """Generate game_stubs.asm with additional helper stubs."""

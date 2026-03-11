@@ -77,15 +77,12 @@ RESET:
     ld   sp, $DFF0
     call VDP_Init
     call PSG_Init
+    call Mapper_Init
     call ClearVRAM
-    ld   a, 2
-    ld   ($FFFF), a
     call LoadPalettes
+    call LoadTiles
     call LoadTilemap
     call LoadSAT
-    ld   a, 3
-    ld   ($FFFF), a
-    call LoadTiles
     ld   a, 1
     ld   b, %11100000
     call VDP_WriteReg
@@ -145,10 +142,29 @@ LoadTiles:
 
 .export LoadTilemap
 LoadTilemap:
+    ; Fill visible name table with tile 1 to guarantee first frame visibility.
+    ; Name table base is configured at $3800 in VDP register 2.
+    ld   hl, $3800
+    call VDP_SetWriteAddress
+    ld   bc, $0300 ; 32x24 entries
+.tilemap_loop:
+    ld   a, $01    ; tile index low byte
+    out  ($BE), a
+    xor  a         ; attributes/high bits
+    out  ($BE), a
+    dec  bc
+    ld   a, b
+    or   c
+    jr   nz, .tilemap_loop
     ret
 
 .export LoadSAT
 LoadSAT:
+    ; Hide all sprites by placing end marker in first SAT Y entry.
+    ld   hl, $3F00
+    call VDP_SetWriteAddress
+    ld   a, $D0
+    out  ($BE), a
     ret
 
 ; Helper to copy BC bytes from HL to VDP
@@ -178,9 +194,9 @@ VDP_Init:
     ld   a, 0
     ld   b, %00000110
     call VDP_WriteReg
-    ; Register 1: Mode 4, 192 lines, Enable display, Enable frame interrupts
+    ; Register 1: Mode 4, 192 lines, keep display disabled during asset upload
     ld   a, 1
-    ld   b, %01100000
+    ld   b, %00100000
     call VDP_WriteReg
     ; Register 2: Name Table Base Address ($3800)
     ld   a, 2
