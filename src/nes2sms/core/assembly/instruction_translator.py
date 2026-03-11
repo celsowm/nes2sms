@@ -25,6 +25,8 @@ from .strategies import (
     NopStrategy,
     BitTestStrategy,
 )
+from ..sms.hal_generator import HALGenerator
+from ..nes.mapper import MapperStrategy
 
 
 class InstructionTranslator:
@@ -260,3 +262,20 @@ class InstructionTranslator:
     def is_supported(self, mnemonic: str) -> bool:
         """Check if an instruction is supported."""
         return mnemonic.upper() in self.strategies
+
+    def get_support_code(self, mapper_strategy: MapperStrategy) -> str:
+        """
+        Generate the complete support library (HAL + Mapper).
+
+        Args:
+            mapper_strategy: The NES mapper strategy being used.
+
+        Returns:
+            Z80 assembly string with HAL and Mapper routines.
+        """
+        hal_gen = HALGenerator()
+        hal_code = hal_gen.generate_all()
+        
+        mapper_code = "\n".join(mapper_strategy.generate_banking_code())
+        
+        return f"{hal_code}\n\n; Mapper Routines\n{mapper_code}"

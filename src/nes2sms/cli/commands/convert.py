@@ -178,7 +178,9 @@ def cmd_convert(args):
 
     # Generate WLA-DX project structure
     print("[5b/6] Generating WLA-DX project...")
-    _generate_wla_project(out_dir, bank_map, loader)
+    from ...core.nes.mapper import get_mapper_strategy
+    mapper_strategy = get_mapper_strategy(loader.header.mapper)
+    _generate_wla_project(out_dir, bank_map, loader, mapper_strategy, translator.instruction_translator)
     print()
 
     # Step 6: Build (optional or required for --run)
@@ -342,7 +344,7 @@ def _build_rom(out_dir: Path) -> bool:
         return False
 
 
-def _generate_wla_project(out_dir: Path, bank_map: dict, loader):
+def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy=None, translator=None):
     """
     Generate WLA-DX project structure.
 
@@ -350,6 +352,8 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader):
         out_dir: Output directory
         bank_map: Bank mapping configuration
         loader: RomLoader instance with header info
+        mapper_strategy: NES mapper strategy
+        translator: InstructionTranslator instance
     """
     from ...infrastructure.wla_dx.templates import (
         MAIN_ASM,
@@ -394,6 +398,12 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader):
     (build_dir / "hal" / "psg.asm").write_text(HAL_PSG_ASM, encoding="utf-8")
     (build_dir / "hal" / "input.asm").write_text(HAL_INPUT_ASM, encoding="utf-8")
     (build_dir / "hal" / "mapper.asm").write_text(HAL_MAPPER_ASM, encoding="utf-8")
+
+    # Write dynamic support code if available
+    if translator and mapper_strategy:
+        support_code = translator.get_support_code(mapper_strategy)
+        (build_dir / "hal" / "support.asm").write_text(support_code, encoding="utf-8")
+        
 
     # Copy stubs
     import shutil

@@ -3,6 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from .parser import ParsedInstruction, AddressingMode
+from .hardware_interceptor import HardwareInterceptorRegistry
+
+# Central registry for hardware redirection
+_INTERCEPTOR = HardwareInterceptorRegistry()
 
 
 def _hex8h(val: int) -> str:
@@ -103,6 +107,10 @@ class LoadAccumulatorStrategy(TranslationStrategy):
 
         elif mode == AddressingMode.ABSOLUTE:
             if addr_val is not None:
+                intercept = _INTERCEPTOR.intercept_read(addr_val, "a")
+                if intercept:
+                    return intercept
+
                 return [
                     f"    LD   hl, ${_hex16h(addr_val)}",
                     "    LD   a, (HL)",
@@ -110,6 +118,10 @@ class LoadAccumulatorStrategy(TranslationStrategy):
             return ["    ; TODO: LDA"]
 
         elif mode == AddressingMode.ZERO_PAGE:
+            if addr_val is not None:
+                intercept = _INTERCEPTOR.intercept_read(addr_val, "a")
+                if intercept:
+                    return intercept
             return [f"    LD   a, {_hex_paren(addr_val or 0, 8)}"]
 
         elif mode == AddressingMode.ABSOLUTE_X:
@@ -137,12 +149,22 @@ class StoreAccumulatorStrategy(TranslationStrategy):
         addr_val = instruction.operand_value or 0
 
         if mode == AddressingMode.ABSOLUTE:
-            return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
-                "    LD   (HL), a",
-            ]
+            if addr_val is not None:
+                # Check for hardware interception
+                intercept = _INTERCEPTOR.intercept_write(addr_val, "a")
+                if intercept:
+                    return intercept
+
+                return [
+                    f"    LD   hl, ${_hex16h(addr_val)}",
+                    "    LD   (HL), a",
+                ]
 
         elif mode == AddressingMode.ZERO_PAGE:
+            if addr_val is not None:
+                intercept = _INTERCEPTOR.intercept_write(addr_val, "a")
+                if intercept:
+                    return intercept
             return [f"    LD   {_hex_paren(addr_val, 8)}, a"]
 
         elif mode == AddressingMode.ABSOLUTE_X:
@@ -171,6 +193,9 @@ class StoreXStrategy(TranslationStrategy):
 
         if mode == AddressingMode.ABSOLUTE:
             if val is not None:
+                intercept = _INTERCEPTOR.intercept_write(val, "b")
+                if intercept:
+                    return intercept
                 return [
                     f"    LD   hl, ${_hex16h(val)}",
                     "    LD   (HL), b",
@@ -179,6 +204,9 @@ class StoreXStrategy(TranslationStrategy):
 
         elif mode == AddressingMode.ZERO_PAGE:
             if val is not None:
+                intercept = _INTERCEPTOR.intercept_write(val, "b")
+                if intercept:
+                    return intercept
                 return [f"    LD   {_hex_paren(val, 8)}, b"]
             return [f"    LD   ({instruction.operand_text}), b"]
 
@@ -193,12 +221,18 @@ class StoreYStrategy(TranslationStrategy):
         val = instruction.operand_value or 0
 
         if mode == AddressingMode.ABSOLUTE:
+            intercept = _INTERCEPTOR.intercept_write(val, "c")
+            if intercept:
+                return intercept
             return [
                 f"    LD   hl, ${_hex16h(val)}",
                 "    LD   (HL), c",
             ]
 
         elif mode == AddressingMode.ZERO_PAGE:
+            intercept = _INTERCEPTOR.intercept_write(val, "c")
+            if intercept:
+                return intercept
             return [f"    LD   {_hex_paren(val, 8)}, c"]
 
         return [f"    LD   ({instruction.operand_text}), c"]
@@ -212,11 +246,17 @@ class LoadXStrategy(TranslationStrategy):
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
             return [f"    LD   b, ${_hex8h(val)}"]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
+            intercept = _INTERCEPTOR.intercept_read(val, "b")
+            if intercept:
+                return intercept
             return [
                 f"    LD   hl, ${_hex16h(val)}",
                 "    LD   b, (HL)",
             ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
+            intercept = _INTERCEPTOR.intercept_read(val, "b")
+            if intercept:
+                return intercept
             return [f"    LD   b, ${_hex8h(val)}"]
         return [f"    LD   b, {instruction.operand_text}"]
 
@@ -229,11 +269,17 @@ class LoadYStrategy(TranslationStrategy):
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
             return [f"    LD   c, ${_hex8h(val)}"]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
+            intercept = _INTERCEPTOR.intercept_read(val, "c")
+            if intercept:
+                return intercept
             return [
                 f"    LD   hl, ${_hex16h(val)}",
                 "    LD   c, (HL)",
             ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
+            intercept = _INTERCEPTOR.intercept_read(val, "c")
+            if intercept:
+                return intercept
             return [f"    LD   c, ${_hex8h(val)}"]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
             return [f"    LD   c, {_hex_paren(instruction.operand_value or 0, 16)}"]
@@ -279,7 +325,7 @@ class BranchStrategy(TranslationStrategy):
         "BEQ": "Z",
         "BNE": "NZ",
         "BMI": "M",
-        "BPL": "NZ",
+        "BPL": "P",
         "BVC": "PO",
         "BVS": "PE",
     }
@@ -493,10 +539,23 @@ class BitTestStrategy(TranslationStrategy):
     """Translation strategy for BIT instruction."""
 
     def translate(self, instruction: ParsedInstruction) -> List[str]:
-        operand = instruction.operand_text
-        if operand and "," in operand:
-            parts = operand.split(",")
-            bit = parts[0].strip()
-            target = parts[1].strip()
-            return [f"    BIT  {bit}, {target}"]
-        return [f"    ; BIT {operand or ''}"]
+        addr_val = instruction.operand_value
+        if addr_val is not None:
+            # Check for hardware interception (e.g., $2002)
+            intercept = _INTERCEPTOR.intercept_read(addr_val, "a")
+            if intercept:
+                # Interceptor returns CALL hal_...
+                # We need to ensure flags are updated after the call
+                return intercept + ["    AND  A"]
+
+            # Normal memory BIT: AND a, (hl) but without affecting A
+            return [
+                f"    LD   hl, ${_hex16h(addr_val)}",
+                "    PUSH AF",
+                "    AND  (HL)",
+                "    POP  AF",
+                "    ; Note: BIT also affects N/V, omitted here for simplicity",
+            ]
+
+        # Bit test with constant (BIT #$XX) - not standard 6502, but for completeness
+        return [f"    BIT  {instruction.operand_text or ''}"]

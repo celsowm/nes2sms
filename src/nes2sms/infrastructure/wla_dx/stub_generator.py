@@ -22,8 +22,6 @@ class StubGenerator:
 
     # Symbols that have HAL implementations or are defined elsewhere
     SKIP_SYMBOLS = {
-        "NMI_Handler",  # Defined in interrupts.asm
-        "RESET_Handler",  # Defined in init.asm
         "IRQ_Handler",  # Defined in interrupts.asm
         "INT_Handler",  # Defined in interrupts.asm
         "VDP_Init",  # HAL
@@ -73,8 +71,6 @@ class StubGenerator:
             "; Game Logic",
             "; Translated from NES 6502 by nes2sms",
             "",
-            '.section "GameLogic" FREE',
-            "",
         ]
 
         # Always generate GameMain entry point
@@ -84,15 +80,23 @@ class StubGenerator:
                 [
                     "; Entry point called by init.asm",
                     "GameMain:",
-                    "    ; TODO: Initialize game state",
-                    "    ; call InitGame",
-                    "",
-                    ".main_loop:",
-                    "    halt",
-                    "    jr   .main_loop",
-                    "",
                 ]
             )
+            
+            if "RESET_Handler" in symbol_names:
+                lines.append("    jp   RESET_Handler")
+            else:
+                lines.extend(
+                    [
+                        "    ; TODO: Initialize game state",
+                        "    ; call InitGame",
+                        "",
+                        ".main_loop:",
+                        "    halt",
+                        "    jr   .main_loop",
+                    ]
+                )
+            lines.append("")
 
         if not self.symbols:
             pass  # GameMain already added above
@@ -101,7 +105,7 @@ class StubGenerator:
                 stub = self._generate_stub(symbol)
                 lines.append(stub)
 
-        lines.append(".ends")
+        lines.append("")
         return "\n".join(lines)
 
     def generate_game_stubs(self) -> str:
@@ -110,9 +114,6 @@ class StubGenerator:
             "; Generated stubs — one per NES subroutine",
             "; Replace each stub body with ported Z80 code.",
             "",
-            '.section "GameStubs" FREE',
-            "",
-            ".ends",
         ]
         return "\n".join(lines)
 
