@@ -22,6 +22,10 @@ import subprocess
 import argparse
 from pathlib import Path
 
+# Adiciona diretório pai ao sys.path para importar o package local
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from hal_generator.wladx_builder import WlaDxBuilder
+
 # ---------------------------------------------------------------------------
 # SMS Header Constants
 # ---------------------------------------------------------------------------
@@ -766,10 +770,15 @@ def cmd_generate(args):
     (out / 'init.asm').write_text(INIT_ASM, encoding='utf-8')
     (out / 'interrupts.asm').write_text(INTERRUPTS_ASM, encoding='utf-8')
     (out / 'assets.asm').write_text(ASSETS_ASM, encoding='utf-8')
-    (out / 'hal' / 'vdp.asm').write_text(HAL_VDP_ASM, encoding='utf-8')
-    (out / 'hal' / 'psg.asm').write_text(HAL_PSG_ASM, encoding='utf-8')
-    (out / 'hal' / 'input.asm').write_text(HAL_INPUT_ASM, encoding='utf-8')
-    (out / 'hal' / 'mapper.asm').write_text(HAL_MAPPER_ASM, encoding='utf-8')
+    
+    # Delegando a geração do HAL para a camada SOLID
+    if args.backend == 'wla-dx':
+        builder = WlaDxBuilder()
+        builder.build(out, rom_banks)
+    else:
+        # Fallback para backend SDCC se existir no futuro (atualmente não implementado nos builders extraídos)
+        print(f"WARNING: SDCC builder na nova arquitetura ainda não injetado. Rodando dry-run.", file=sys.stderr)
+
     (out / 'stubs' / 'game_logic.asm').write_text(GAME_LOGIC_STUB_ASM, encoding='utf-8')
     write_linker_script(out, rom_banks)
     (out / 'Makefile').write_text(MAKEFILE_CONTENT, encoding='utf-8')
