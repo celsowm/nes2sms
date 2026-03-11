@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ...infrastructure.rom_loader import RomLoader
 from ...infrastructure.asset_writer import AssetWriter
+from ...infrastructure.symbol_extractor import StaticSymbolExtractor
 
 
 def cmd_ingest(args):
@@ -23,16 +24,6 @@ def cmd_ingest(args):
     # Load ROM
     loader = RomLoader()
     loader.load(nes_path)
-
-    # Write extracted data
-    writer = AssetWriter(out_dir)
-    writer.write_binary("prg.bin", loader.prg_data, "work")
-
-    if loader.chr_data:
-        writer.write_binary("chr.bin", loader.chr_data, "work")
-
-    if loader.trainer_data:
-        writer.write_binary("trainer.bin", loader.trainer_data, "work")
 
     # Build manifest
     manifest = {
@@ -53,6 +44,26 @@ def cmd_ingest(args):
         "tool": "nes2sms",
         "source_hash_sha256": loader.sha256,
     }
+
+    # Write extracted data
+    writer = AssetWriter(out_dir)
+    writer.write_binary("prg.bin", loader.prg_data, "work")
+
+    if loader.chr_data:
+        writer.write_binary("chr.bin", loader.chr_data, "work")
+
+    if loader.trainer_data:
+        writer.write_binary("trainer.bin", loader.trainer_data, "work")
+
+    # Extract symbols from PRG
+    if loader.prg_data:
+        extractor = StaticSymbolExtractor(loader.prg_data)
+        symbols = extractor.extract()
+        symbol_dict = extractor.to_dict()
+        writer.write_json("symbols.json", symbol_dict, "work")
+        manifest["symbols_extracted"] = len(symbols)
+    else:
+        manifest["symbols_extracted"] = 0
 
     # Copy disasm artifacts if provided
     if args.disasm_dir:

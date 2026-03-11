@@ -10,6 +10,8 @@ from .commands.convert_gfx import cmd_convert_gfx
 from .commands.convert_audio import cmd_convert_audio
 from .commands.generate import cmd_generate
 from .commands.build import cmd_build
+from .commands.translate_asm import cmd_translate_asm
+from .commands.convert import cmd_convert
 
 
 def main():
@@ -19,6 +21,15 @@ def main():
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # One-step convert command (simple mode)
+    p_convert = subparsers.add_parser("convert", help="One-step NES to SMS conversion")
+    p_convert.add_argument("--nes", required=True, help="Path to .nes ROM file")
+    p_convert.add_argument("--out", required=True, help="Output directory")
+    p_convert.add_argument("--flip-strategy", default="cache", choices=["cache", "none"])
+    p_convert.add_argument("--build", action="store_true", help="Build SMS ROM after conversion")
+    p_convert.add_argument("--run", action="store_true", help="Open in emulator after conversion")
+    p_convert.add_argument("--emulator", help="Path to emulator executable (default: auto-detect)")
 
     # Ingest command
     p_ingest = subparsers.add_parser("ingest", help="Ingest NES ROM file")
@@ -71,6 +82,12 @@ def main():
     p_build = subparsers.add_parser("build", help="Build SMS ROM")
     p_build.add_argument("--dir", required=True, help="Build directory with Makefile")
 
+    # Translate assembly command
+    p_trans = subparsers.add_parser("translate-asm", help="Translate 6502 assembly to Z80")
+    p_trans.add_argument("--input", required=True, help="Input 6502 assembly file")
+    p_trans.add_argument("--output", help="Output Z80 assembly file (optional)")
+    p_trans.add_argument("--out", help="Output directory (if --output not specified)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -78,7 +95,9 @@ def main():
         sys.exit(1)
 
     try:
-        if args.command == "ingest":
+        if args.command == "convert":
+            cmd_convert(args)
+        elif args.command == "ingest":
             cmd_ingest(args)
         elif args.command == "analyze-mapper":
             cmd_analyze_mapper(args)
@@ -90,6 +109,8 @@ def main():
             cmd_generate(args)
         elif args.command == "build":
             cmd_build(args)
+        elif args.command == "translate-asm":
+            cmd_translate_asm(args)
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)

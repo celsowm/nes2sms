@@ -1,0 +1,2 @@
+[console_scripts]
+nes2sms = nes2sms.cli.main:main

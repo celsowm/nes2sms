@@ -1,6 +1,6 @@
 """NES to SMS tile converter (2bpp to 4bpp)."""
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from ...shared.models import TileConversionResult
 
 
@@ -23,19 +23,21 @@ class TileConverter:
         self.color_maps = color_maps
         self.flip_strategy = flip_strategy
 
-    def convert(self, chr_data: bytes) -> TileConversionResult:
+    def convert(self, chr_data: bytes, bank_id: Optional[int] = 0) -> TileConversionResult:
         """
         Convert all tiles in CHR data.
 
         Args:
             chr_data: Raw CHR data (16 bytes per tile)
+            bank_id: CHR bank ID (for multi-bank games)
 
         Returns:
-            TileConversionResult with SMS tiles and flip index
+            TileConversionResult with SMS tiles, flip index, and metadata
         """
         tiles = []
         flip_index = {}
         warnings = []
+        metadata = []
 
         num_tiles = len(chr_data) // 16
 
@@ -43,14 +45,46 @@ class TileConverter:
             tile_2bpp = chr_data[i * 16 : (i + 1) * 16]
             sms_tile = self._convert_tile(tile_2bpp)
             tiles.append(sms_tile)
+            metadata.append({"bank": bank_id, "tile_index": i})
 
             if self.flip_strategy == "cache":
-                self._handle_flip_variants(i, sms_tile, flip_index)
+                self._handle_flip_variants(i, sms_tile, flip_index, bank_id or 0)
 
         if len(chr_data) % 16 != 0:
             warnings.append(f"CHR data has {len(chr_data) % 16} extra bytes (incomplete tile)")
 
-        return TileConversionResult(sms_tiles=tiles, flip_index=flip_index, warnings=warnings)
+        return TileConversionResult(
+            sms_tiles=tiles, flip_index=flip_index, warnings=warnings, tile_metadata=metadata
+        )
+
+    def convert_multi_bank(self, chr_banks: List[Tuple[int, bytes]]) -> TileConversionResult:
+        """
+        Convert tiles from multiple CHR banks.
+
+        Args:
+            chr_banks: List of (bank_id, chr_data) tuples
+
+        Returns:
+            TileConversionResult with all tiles and bank metadata
+        """
+        all_tiles = []
+        all_flip_index = {}
+        all_warnings = []
+        all_metadata = []
+
+        for bank_id, chr_data in chr_banks:
+            result = self.convert(chr_data, bank_id=bank_id)
+            all_tiles.extend(result.sms_tiles)
+            all_flip_index.update(result.flip_index)
+            all_warnings.extend(result.warnings)
+            all_metadata.extend(result.tile_metadata)
+
+        return TileConversionResult(
+            sms_tiles=all_tiles,
+            flip_index=all_flip_index,
+            warnings=all_warnings,
+            tile_metadata=all_metadata,
+        )
 
     def _convert_tile(self, tile_16bpp: bytes) -> bytes:
         """
@@ -87,7 +121,9 @@ class TileConverter:
 
         return bytes(sms32)
 
-    def _handle_flip_variants(self, tile_index: int, sms_tile: bytes, flip_index: Dict):
+    def _handle_flip_variants(
+        self, tile_index: int, sms_tile: bytes, flip_index: Dict, bank_id: Optional[int] = 0
+    ):
         """
         Handle flip variant generation for sprite cache.
 
@@ -95,18 +131,20 @@ class TileConverter:
             tile_index: Original tile index
             sms_tile: Converted SMS tile data
             flip_index: Dictionary to populate with flip variants
+            bank_id: CHR bank ID for unique keys
         """
+        prefix = f"B{bank_id}_{tile_index}" if bank_id else f"{tile_index}"
         # H flip
         h_flip = self._flip_tile_h(sms_tile)
-        flip_index[f"{tile_index}_H"] = len(flip_index) + 1
+        flip_index[f"{prefix}_H"] = len(flip_index) + 1
 
         # V flip
         v_flip = self._flip_tile_v(sms_tile)
-        flip_index[f"{tile_index}_V"] = len(flip_index) + 2
+        flip_index[f"{prefix}_V"] = len(flip_index) + 2
 
         # HV flip
-        hv_flip = self._flip_tile_v(h_flip)
-        flip_index[f"{tile_index}_HV"] = len(flip_index) + 3
+        hv_flip = self._flip_tile_v(self._flip_tile_h(v_flip))
+        flip_index[f"{prefix}_HV"] = len(flip_index) + 3
 
     @staticmethod
     def _flip_tile_h(tile32: bytes) -> bytes:

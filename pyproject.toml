@@ -37,6 +37,13 @@ dev = [
     "mypy>=1.0",
 ]
 
+# Note: WLA-DX is required for building SMS ROMs but not available via pip
+# Install separately via:
+#   - Windows: run setup.bat (downloads from GitHub releases)
+#   - Linux: apt-get install wla-dx / dnf install wla-dx / brew install wla-dx
+#   - macOS: brew install wla-dx
+#   - Manual: https://github.com/vhelin/wla-dx/releases
+
 [project.scripts]
 nes2sms = "nes2sms.cli.main:main"
 
@@ -46,9 +53,6 @@ nes2sms = "nes2sms.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.package-dir]
-"src/nes2sms" = "src/nes2sms"
 
 [tool.black]
 line-length = 100

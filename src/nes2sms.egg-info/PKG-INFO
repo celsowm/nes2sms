@@ -1,0 +1,28 @@
+Metadata-Version: 2.4
+Name: nes2sms
+Version: 0.1.0
+Summary: NES to Sega Master System conversion pipeline
+Author: nes2sms contributors
+License: MIT
+Project-URL: Homepage, https://github.com/nes2sms/nes2sms
+Project-URL: Bug Tracker, https://github.com/nes2sms/nes2sms/issues
+Keywords: nes,sms,sega,master-system,retro,conversion,z80,6502
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Games/Entertainment
+Classifier: Topic :: Software Development :: Build Tools
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"
+Requires-Dist: black>=23.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.0; extra == "dev"

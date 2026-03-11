@@ -49,7 +49,7 @@ class WlaDxGenerator:
         # Write main files with dynamic bank count
         (self.output_dir / "main.asm").write_text(MAIN_ASM, encoding="utf-8")
         (self.output_dir / "memory.inc").write_text(
-            MEMORY_INC.format(banks=rom_banks), encoding="utf-8"
+            MEMORY_INC.replace("NUM_ROM_BANKS", str(rom_banks)), encoding="utf-8"
         )
         (self.output_dir / "init.asm").write_text(
             INIT_ASM.format(banks=rom_banks), encoding="utf-8"

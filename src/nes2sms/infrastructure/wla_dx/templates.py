@@ -18,9 +18,9 @@ MAIN_ASM = """; SMS Z80 Main Entry
 """
 
 MEMORY_INC = """.ROMBANKMAP
-    BANKSTOTAL {banks}
+    BANKSTOTAL NUM_ROM_BANKS
     BANKSIZE $4000
-    BANKS {banks}
+    BANKS NUM_ROM_BANKS
 .ENDRO
 
 .MEMORYMAP
@@ -92,9 +92,9 @@ ASSETS_ASM = """
 .ORG $0000
 
 PaletteBG:
-    .INCBIN "palette_bg.bin"
+    .INCBIN "assets/palette_bg.bin"
 PaletteSPR:
-    .INCBIN "palette_spr.bin"
+    .INCBIN "assets/palette_spr.bin"
 
 LoadPalettes:
     ret

@@ -48,6 +48,7 @@ class TileConversionResult:
     sms_tiles: List[bytes]
     flip_index: Dict
     warnings: List[str] = field(default_factory=list)
+    tile_metadata: List[Dict] = field(default_factory=list)
 
 
 @dataclass
