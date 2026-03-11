@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 import os
 import argparse
@@ -6,9 +5,18 @@ import subprocess
 from pathlib import Path
 
 def run_cmd(cmd, step_name):
+    # Prepend tools/wla-dx to PATH for the 'make' step or any tool execution
+    script_dir = Path(__file__).parent
+    wla_dx_dir = script_dir / "tools" / "wla-dx"
+    
+    env = os.environ.copy()
+    if wla_dx_dir.exists():
+        path_sep = ";" if os.name == "nt" else ":"
+        env["PATH"] = str(wla_dx_dir) + path_sep + env.get("PATH", "")
+
     print(f"\n[{step_name}] Running: {' '.join(cmd)}")
     try:
-        result = subprocess.run(cmd, capture_output=False)
+        result = subprocess.run(cmd, capture_output=False, env=env)
         if result.returncode != 0:
             print(f"ERROR: Step '{step_name}' failed with code {result.returncode}", file=sys.stderr)
             sys.exit(result.returncode)
