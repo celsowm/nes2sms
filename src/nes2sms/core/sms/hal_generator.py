@@ -32,6 +32,7 @@ class HALGenerator:
 hal_ppu_write:
     ; A = Value to write
     ; L = Register offset (0-7)
+    ld   b, a    ; Save value to B
     ld   h, $00
     add  hl, hl  ; hl = offset * 2
     ld   de, _ppu_jump_table
@@ -39,6 +40,7 @@ hal_ppu_write:
     ld   e, (hl)
     inc  hl
     ld   d, (hl)
+    ld   a, b    ; Restore value to A
     push de
     ret
 
@@ -47,7 +49,15 @@ _ppu_jump_table:
     .dw _ppu_2004, _ppu_2005, _ppu_2006, _ppu_2007
 
 _ppu_2000: ; PPUCTRL
-    ; Keep bootstrap display stable: translated writes are ignored for now.
+    ; TODO: Map NES PPUCTRL to SMS VDP regs.
+    ; Bits 0-1: Base nametable address ($2000,$2400,$2800,$2C00)
+    ; Bit 2: VRAM address increment (0: add 1; 1: add 32)
+    ; Bit 3: Sprite pattern table address (0: $0000; 1: $1000)
+    ; Bit 4: Background pattern table address (0: $0000; 1: $1000)
+    ; Bit 5: Sprite size (0: 8x8; 1: 8x16)
+    ; Bit 6: PPU master/slave select
+    ; Bit 7: Generate NMI
+    ld   (nes_ppu_ctrl), a
     ret
 
 _ppu_2005: ; PPUSCROLL
@@ -55,22 +65,161 @@ _ppu_2005: ; PPUSCROLL
     ret
 
 _ppu_2006: ; PPUADDR
-    ; TODO: Implement address latch compatibility with NES $2006.
+    ; NES PPUADDR is a two-write latch to set VRAM address.
+    ld   a, (nes_ppu_latch)
+    xor  1
+    ld   (nes_ppu_latch), a
+    jr   z, .low_byte
+
+.high_byte:
+    ld   a, b
+    ld   (nes_ppu_addr + 1), a
+    ret
+
+.low_byte:
+    ld   a, b
+    ld   (nes_ppu_addr), a
+
+    ; Map and set VDP address
+    ld   hl, (nes_ppu_addr)
+    call hal_vdp_map_address
+    call VDP_SetWriteAddress
     ret
 
 _ppu_2007: ; PPUDATA
-    ; Prevent translated reset code from clobbering bootstrap tilemap.
+    ; Write value in A to VDP data port
+    out  ($BE), a
+
+    ; Auto-increment address
+    ld   hl, (nes_ppu_addr)
+    ld   a, (nes_ppu_ctrl)
+    and  %00000100
+    jr   nz, .inc32
+    inc  hl
+    jr   .update_addr
+.inc32:
+    ld   de, 32
+    add  hl, de
+.update_addr:
+    ld   (nes_ppu_addr), hl
+
+    ; If we incremented by 32, we MUST re-set the VDP address
+    ; because SMS VDP auto-increment is always 1.
+    ld   a, (nes_ppu_ctrl)
+    and  %00000100
+    ret  z
+
+    ld   hl, (nes_ppu_addr)
+    call hal_vdp_map_address
+    call VDP_SetWriteAddress
+    ret
+
+hal_vdp_map_address:
+    ; HL = NES address
+    ; Returns HL = SMS address + Command bits
+
+    ; Check for Palette ($3F00-$3F1F)
+    ld   a, h
+    cp   $3F
+    jr   nz, .not_palette
+
+    ; Palette: SMS CRAM is accessed at $C000 | offset
+    ld   a, l
+    and  $1F
+    ld   l, a
+    ld   h, $C0
+    ret
+
+.not_palette:
+    ; Check for Nametables ($2000-$2FFF)
+    ld   a, h
+    and  $F0
+    cp   $20
+    jr   nz, .not_nametable
+
+    ; Nametable: Map to SMS Nametable at $3800
+    ld   a, h
+    sub  $20
+    and  $07
+    add  a, $38
+    ld   h, a
+    ret
+
+.not_nametable:
+    ; Default: direct mapping for patterns etc.
+    ld   a, h
+    and  $3F
+    ld   h, a
     ret
 
 _ppu_2001: ; PPUMASK
+    ret
+
 _ppu_2002: ; PPUSTATUS
+    ; Reading PPUSTATUS resets the PPUADDR latch
+    xor  a
+    ld   (nes_ppu_latch), a
+    ; Return dummy status for now (bit 7 = vblank)
+    in   a, ($BF)
+    and  $80
+    ret
+
 _ppu_2003: ; OAMADDR
 _ppu_2004: ; OAMDATA
     ret
 
 hal_ppu_read:
-    ; Return clear status by default to avoid dead loops on incomplete translation.
+    ; L = Register offset (0-7)
+    ld   h, $00
+    add  hl, hl  ; hl = offset * 2
+    ld   de, _ppu_read_jump_table
+    add  hl, de
+    ld   e, (hl)
+    inc  hl
+    ld   d, (hl)
+    push de
+    ret
+
+_ppu_read_jump_table:
+    .dw _ppu_read_dead, _ppu_read_dead, _ppu_2002, _ppu_read_dead
+    .dw _ppu_read_dead, _ppu_read_dead, _ppu_read_dead, _ppu_read_2007
+
+_ppu_read_dead:
     xor  a
+    ret
+
+_ppu_read_2007:
+    ld   a, (nes_ppu_read_buffer)
+    ld   b, a ; save buffer to return
+
+    in   a, ($BE)
+    ld   (nes_ppu_read_buffer), a
+
+    ; Auto-increment address
+    push bc
+    ld   hl, (nes_ppu_addr)
+    ld   a, (nes_ppu_ctrl)
+    and  %00000100
+    jr   nz, .read_inc32
+    inc  hl
+    jr   .read_update_addr
+.read_inc32:
+    ld   de, 32
+    add  hl, de
+.read_update_addr:
+    ld   (nes_ppu_addr), hl
+
+    ; If we incremented by 32, we MUST re-set the VDP address
+    ld   a, (nes_ppu_ctrl)
+    and  %00000100
+    jr   z, .read_done
+
+    ld   hl, (nes_ppu_addr)
+    call hal_vdp_map_address
+    call VDP_SetWriteAddress
+.read_done:
+    pop  bc
+    ld   a, b ; return previous buffer
     ret
 """
 
@@ -129,6 +278,13 @@ hal_vblank_wait:
     and  $80
     jp   z, -
     ret
+
+.section "HAL_Variables" ramfree
+nes_ppu_latch:       .db
+nes_ppu_addr:        .dw
+nes_ppu_ctrl:        .db
+nes_ppu_read_buffer: .db
+.ends
 """
 
     def generate_footer(self) -> str:

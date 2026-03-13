@@ -12,32 +12,32 @@ class TestHardwareMapping:
         self.translator = InstructionTranslator()
 
     def test_ppu_write_interception(self):
-        """Test that STA $2000 is intercepted and maps to _hal_ppu_write."""
+        """Test that STA $2000 is intercepted and maps to hal_ppu_write."""
         result = self.translator.translate_line("STA $2000")
-        assert "CALL _hal_ppu_write" in result
+        assert "CALL hal_ppu_write" in result
         assert "LD   l, 0" in result  # Offset 0 for $2000
 
     def test_ppu_vram_write_interception(self):
         """Test that STA $2007 (PPU Data) is intercepted."""
         result = self.translator.translate_line("STA $2007")
-        assert "CALL _hal_ppu_write" in result
+        assert "CALL hal_ppu_write" in result
         assert "LD   l, 7" in result
 
     def test_oam_dma_interception(self):
         """Test that STA $4014 is intercepted for OAM DMA."""
         result = self.translator.translate_line("STA $4014")
-        assert "CALL _hal_oam_dma" in result
+        assert "CALL hal_oam_dma" in result
 
     def test_apu_write_interception(self):
         """Test that STA $4000 (APU Pulse 1) is intercepted."""
         result = self.translator.translate_line("STA $4000")
-        assert "CALL _hal_apu_write" in result
+        assert "CALL hal_apu_write" in result
         assert "LD   l, 0" in result
 
     def test_input_read_interception(self):
         """Test that LDA $4016 (Joypad 1) is intercepted."""
         result = self.translator.translate_line("LDA $4016")
-        assert "CALL _hal_input_read" in result
+        assert "CALL hal_input_read" in result
         assert "LD   l, 0" in result
 
     def test_normal_memory_not_intercepted(self):

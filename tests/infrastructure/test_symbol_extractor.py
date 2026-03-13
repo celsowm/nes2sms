@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from nes2sms.infrastructure.symbol_extractor import StaticSymbolExtractor
+from nes2sms.shared.models import Symbol
 
 
 class TestStaticSymbolExtractor:
@@ -114,17 +115,13 @@ class TestStaticSymbolExtractor:
 
         extractor = StaticSymbolExtractor(prg_data, base_address=0x8000)
         extractor.symbols = [
-            type(
-                "Symbol",
-                (),
-                {
-                    "name": "Test",
-                    "address": 0x8000,
-                    "bank": 0,
-                    "type": "code",
-                    "comment": "Test symbol",
-                },
-            )()
+            Symbol(
+                name="Test",
+                address=0x8000,
+                bank=0,
+                type="code",
+                comment="Test symbol",
+            )
         ]
 
         result = extractor.to_dict()

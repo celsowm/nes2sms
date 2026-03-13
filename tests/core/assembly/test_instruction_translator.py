@@ -82,8 +82,8 @@ class TestInstructionTranslator:
 
     def test_translate_sta_absolute(self):
         """Test STA abs translation."""
-        result = self.translator.translate_line("STA $2000")
-        assert "LD   hl, $2000h" in result
+        result = self.translator.translate_line("STA $2123")
+        assert "LD   hl, $2123h" in result
         assert "LD   (HL), a" in result
 
     def test_translate_ldx(self):

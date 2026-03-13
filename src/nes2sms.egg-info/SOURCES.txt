@@ -20,6 +20,7 @@ src/nes2sms/cli/commands/translate_asm.py
 src/nes2sms/core/assembly/__init__.py
 src/nes2sms/core/assembly/control_flow_analyzer.py
 src/nes2sms/core/assembly/flow_aware_translator.py
+src/nes2sms/core/assembly/hardware_interceptor.py
 src/nes2sms/core/assembly/instruction_translator.py
 src/nes2sms/core/assembly/parser.py
 src/nes2sms/core/assembly/registers.py
@@ -35,6 +36,7 @@ src/nes2sms/core/interfaces/i_translator.py
 src/nes2sms/core/nes/__init__.py
 src/nes2sms/core/nes/header.py
 src/nes2sms/core/nes/mapper.py
+src/nes2sms/core/sms/hal_generator.py
 src/nes2sms/infrastructure/__init__.py
 src/nes2sms/infrastructure/asset_writer.py
 src/nes2sms/infrastructure/rom_loader.py
@@ -46,6 +48,7 @@ src/nes2sms/infrastructure/disassembler/disassembler.py
 src/nes2sms/infrastructure/disassembler/info_file_generator.py
 src/nes2sms/infrastructure/disassembler/native_disassembler.py
 src/nes2sms/infrastructure/wla_dx/__init__.py
+src/nes2sms/infrastructure/wla_dx/components.py
 src/nes2sms/infrastructure/wla_dx/project_generator.py
 src/nes2sms/infrastructure/wla_dx/stub_generator.py
 src/nes2sms/infrastructure/wla_dx/templates.py

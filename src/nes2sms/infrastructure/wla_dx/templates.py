@@ -75,6 +75,15 @@ INIT_ASM = """
 .SECTION "ResetCode" FORCE ORG $0070
 RESET:
     ld   sp, $DFF0
+
+    ; Clear HAL variables
+    xor  a
+    ld   (nes_ppu_latch), a
+    ld   hl, 0
+    ld   (nes_ppu_addr), hl
+    ld   (nes_ppu_ctrl), a
+    ld   (nes_ppu_read_buffer), a
+
     call VDP_Init
     call PSG_Init
     call Mapper_Init
