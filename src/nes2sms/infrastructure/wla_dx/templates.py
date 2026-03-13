@@ -142,15 +142,13 @@ LoadTiles:
 
 .export LoadTilemap
 LoadTilemap:
-    ; Fill visible name table with tile 1 to guarantee first frame visibility.
-    ; Name table base is configured at $3800 in VDP register 2.
+    ; Clear name table to tile 0
     ld   hl, $3800
     call VDP_SetWriteAddress
-    ld   bc, $0300 ; 32x24 entries
+    ld   bc, $0380 ; 32x28 entries x 2 bytes
 .tilemap_loop:
-    ld   a, $01    ; tile index low byte
+    xor  a
     out  ($BE), a
-    xor  a         ; attributes/high bits
     out  ($BE), a
     dec  bc
     ld   a, b
@@ -202,6 +200,14 @@ VDP_Init:
     ld   a, 2
     ld   b, %11101110
     call VDP_WriteReg
+    ; Register 5: Sprite Attribute Table Base ($3F00)
+    ld   a, 5
+    ld   b, $7E
+    call VDP_WriteReg
+    ; Register 6: Sprite tile base (first 256 tiles)
+    ld   a, 6
+    ld   b, $00
+    call VDP_WriteReg
     ret
 
 VDP_WriteReg:
@@ -233,14 +239,13 @@ ClearVRAM:
     ld   hl, $0000
     call VDP_SetWriteAddress
     ld   bc, $4000
-    ld   a, 0
-clear_loop:
-    ld   c, VDP_DATA_PORT
-    out  (c), a
+    xor  a
+.clear_loop:
+    out  ($BE), a
     dec  bc
     ld   a, b
     or   c
-    jr   nz, clear_loop
+    jr   nz, .clear_loop
     ret
 """
 

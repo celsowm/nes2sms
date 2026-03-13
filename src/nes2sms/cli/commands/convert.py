@@ -11,6 +11,8 @@ from ...infrastructure.wla_dx.stub_generator import StubGenerator
 from ...infrastructure.disassembler import Da65Disassembler
 from ...infrastructure.disassembler.native_disassembler import Native6502Disassembler
 from ...core.graphics import TileConverter, PaletteMapper
+from ...core.graphics.oam_extractor import OamExtractor
+from ...core.graphics.palette_extractor import PaletteExtractor
 from ...core.assembly.flow_aware_translator import FlowAwareTranslator
 from ...shared.models import Symbol
 
@@ -103,7 +105,15 @@ def cmd_convert(args):
     # Step 4: Convert graphics
     print("[4/6] Converting graphics...")
     if loader.chr_data:
-        palette_mapper = PaletteMapper()
+        # Try to extract actual palette from PRG code
+        nes_palette_ram = None
+        if loader.prg_data:
+            pal_extractor = PaletteExtractor(loader.prg_data)
+            nes_palette_ram = pal_extractor.extract_palette()
+            if nes_palette_ram:
+                print("      Extracted palette from ROM PRG code")
+
+        palette_mapper = PaletteMapper(nes_palette_ram=nes_palette_ram)
         bg_pal, spr_pal, color_maps = palette_mapper.build_all_palettes()
 
         tile_converter = TileConverter(
@@ -129,6 +139,19 @@ def cmd_convert(args):
         print(f"      {len(result.sms_tiles)} tiles | {total_size // 1024}KB")
         print(f"      Palettes: palette_bg.bin + palette_spr.bin")
     print()
+
+    # Step 4b: Extract OAM/sprite data
+    oam_sprites = None
+    if loader.prg_data and loader.chr_data:
+        chr_tile_count = len(loader.chr_data) // 16
+        oam_extractor = OamExtractor(loader.prg_data, chr_tile_count)
+        oam_sprites = oam_extractor.extract_oam_table()
+        if oam_sprites:
+            print(f"[4b] Extracted {len(oam_sprites)} sprites from OAM data")
+            y_table, xt_table = oam_extractor.to_sms_sat(oam_sprites)
+            writer.write_binary("sat_y.bin", y_table, "assets")
+            writer.write_binary("sat_xt.bin", xt_table, "assets")
+            print()
 
     # Step 5: Generate Z80 stubs with translation
     print("[5/6] Generating Z80 stubs with translation...")
@@ -181,7 +204,7 @@ def cmd_convert(args):
     print("[5b/6] Generating WLA-DX project...")
     from ...core.nes.mapper import get_mapper_strategy
     mapper_strategy = get_mapper_strategy(loader.header.mapper)
-    _generate_wla_project(out_dir, bank_map, loader, mapper_strategy, translator.instruction_translator)
+    _generate_wla_project(out_dir, bank_map, loader, mapper_strategy, translator.instruction_translator, oam_sprites=oam_sprites)
     print()
 
     # Step 6: Build (optional or required for --run)
@@ -345,7 +368,102 @@ def _build_rom(out_dir: Path) -> bool:
         return False
 
 
-def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy=None, translator=None):
+def _generate_assets_with_oam(oam_sprites: list) -> str:
+    """
+    Generate assets.asm with proper SAT loading from extracted NES OAM data.
+
+    Args:
+        oam_sprites: List of dicts with y, tile, attr, x keys
+    """
+    # Build Y table bytes
+    y_bytes = ", ".join(f"${s['y']:02X}" for s in oam_sprites)
+    # Build X/tile pairs
+    xt_bytes = ", ".join(f"${s['x']:02X},${s['tile']:02X}" for s in oam_sprites)
+    num_sprites = len(oam_sprites)
+    # First blank tile index (one past the highest used sprite tile)
+    num_sprites_tiles = max(s['tile'] for s in oam_sprites) + 1
+
+    return f"""
+.export LoadPalettes
+LoadPalettes:
+    ; Load BG palette
+    ld   hl, $C000
+    call VDP_SetWriteAddress
+    ld   hl, PaletteBG
+    ld   bc, 16
+    call VDP_CopyBytes
+
+    ; Load Sprite palette
+    ld   hl, $C010
+    call VDP_SetWriteAddress
+    ld   hl, PaletteSPR
+    ld   bc, 16
+    call VDP_CopyBytes
+    ret
+
+.export LoadTiles
+LoadTiles:
+    ld   hl, $0000
+    call VDP_SetWriteAddress
+    ld   hl, Tiles
+    ld   bc, $2000
+    call VDP_CopyBytes
+    ret
+
+.export LoadTilemap
+LoadTilemap:
+    ; Clear name table with a blank tile (first empty tile after sprite tiles)
+    ld   hl, $3800
+    call VDP_SetWriteAddress
+    ld   bc, $0380 ; 32x28 entries
+.tilemap_loop:
+    ld   a, {num_sprites_tiles}
+    out  ($BE), a
+    xor  a
+    out  ($BE), a
+    dec  bc
+    ld   a, b
+    or   c
+    jr   nz, .tilemap_loop
+    ret
+
+.export LoadSAT
+LoadSAT:
+    ; Load sprite Y positions
+    ld   hl, $3F00
+    call VDP_SetWriteAddress
+    ld   hl, _SpriteY
+    ld   bc, {num_sprites + 1}
+    call VDP_CopyBytes
+
+    ; Load sprite X/tile pairs
+    ld   hl, $3F80
+    call VDP_SetWriteAddress
+    ld   hl, _SpriteXT
+    ld   bc, {num_sprites * 2}
+    call VDP_CopyBytes
+    ret
+
+_SpriteY:
+    .db {y_bytes}, $D0
+
+_SpriteXT:
+    .db {xt_bytes}
+
+; Helper to copy BC bytes from HL to VDP
+VDP_CopyBytes:
+    ld   a, (hl)
+    out  ($BE), a
+    inc  hl
+    dec  bc
+    ld   a, b
+    or   c
+    jr   nz, VDP_CopyBytes
+    ret
+"""
+
+
+def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy=None, translator=None, oam_sprites=None):
     """
     Generate WLA-DX project structure.
 
@@ -355,6 +473,7 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy
         loader: RomLoader instance with header info
         mapper_strategy: NES mapper strategy
         translator: InstructionTranslator instance
+        oam_sprites: Extracted NES OAM sprite data (list of dicts with y, tile, attr, x)
     """
     from ...infrastructure.wla_dx.templates import (
         MAIN_ASM,
@@ -392,7 +511,13 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy
     # Write other files
     (build_dir / "init.asm").write_text(INIT_ASM, encoding="utf-8")
     (build_dir / "interrupts.asm").write_text(INTERRUPTS_ASM, encoding="utf-8")
-    (build_dir / "assets.asm").write_text(ASSETS_ASM, encoding="utf-8")
+
+    # Generate assets.asm - use dynamic SAT if OAM sprites were extracted
+    if oam_sprites:
+        assets_content = _generate_assets_with_oam(oam_sprites)
+    else:
+        assets_content = ASSETS_ASM
+    (build_dir / "assets.asm").write_text(assets_content, encoding="utf-8")
 
     # HAL files
     (build_dir / "hal" / "vdp.asm").write_text(HAL_VDP_ASM, encoding="utf-8")

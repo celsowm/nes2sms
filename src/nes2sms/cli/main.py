@@ -12,6 +12,7 @@ from .commands.generate import cmd_generate
 from .commands.build import cmd_build
 from .commands.translate_asm import cmd_translate_asm
 from .commands.convert import cmd_convert
+from .commands.bootstrap_hello import cmd_bootstrap_hello
 
 
 def main():
@@ -88,6 +89,20 @@ def main():
     p_trans.add_argument("--output", help="Output Z80 assembly file (optional)")
     p_trans.add_argument("--out", help="Output directory (if --output not specified)")
 
+    # Bootstrap hello-world command
+    p_bootstrap = subparsers.add_parser(
+        "bootstrap-hello",
+        help="Build local NES hello world and convert it to SMS",
+    )
+    p_bootstrap.add_argument(
+        "--out",
+        default="out/hello_world",
+        help="Output directory (default: out/hello_world)",
+    )
+    p_bootstrap.add_argument("--no-run", action="store_true", help="Do not launch emulators")
+    p_bootstrap.add_argument("--nes-emulator", help="Path to NES emulator executable")
+    p_bootstrap.add_argument("--sms-emulator", help="Path to SMS emulator executable")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -111,6 +126,8 @@ def main():
             cmd_build(args)
         elif args.command == "translate-asm":
             cmd_translate_asm(args)
+        elif args.command == "bootstrap-hello":
+            cmd_bootstrap_hello(args)
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)

@@ -24,6 +24,8 @@ class StubGenerator:
     SKIP_SYMBOLS = {
         "IRQ_Handler",  # Defined in interrupts.asm
         "INT_Handler",  # Defined in interrupts.asm
+        "NMI_Handler",  # Handled by interrupts.asm wrapper
+        "RESET_Handler",  # Handled by init.asm bootstrap
         "VDP_Init",  # HAL
         "PSG_Init",  # HAL
         "ClearVRAM",  # HAL
@@ -79,27 +81,17 @@ class StubGenerator:
         symbol_names = {s.name for s in self.symbols}
 
         # Always generate GameMain entry point under converter control.
+        # The bootstrap (init.asm) already loads palettes, tiles, tilemap, and SAT,
+        # so GameMain just needs to run the main loop.
         lines.extend(
             [
                 "; Entry point called by init.asm",
                 "GameMain:",
+                ".main_loop:",
+                "    halt",
+                "    jr   .main_loop",
             ]
         )
-
-        entry_target = self._find_reset_entry_target(symbol_names)
-        if entry_target:
-            lines.append(f"    jp   {entry_target}")
-        else:
-            lines.extend(
-                [
-                    "    ; TODO: Initialize game state",
-                    "    ; call InitGame",
-                    "",
-                    ".main_loop:",
-                    "    halt",
-                    "    jr   .main_loop",
-                ]
-            )
         lines.append("")
 
         if not self.symbols:

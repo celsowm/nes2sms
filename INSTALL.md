@@ -115,6 +115,27 @@ cd output_dir/build
 make  # or run build.bat on Windows
 ```
 
+### Bootstrap Hello World NES -> SMS
+
+```bash
+# Build NES hello world, convert to SMS, build both, and launch emulators
+nes2sms bootstrap-hello
+
+# Same flow but without launching emulators
+nes2sms bootstrap-hello --no-run
+```
+
+By default, `bootstrap-hello` tries to resolve emulators in this order:
+
+1. Explicit CLI path (`--nes-emulator` / `--sms-emulator`)
+2. Executable in `PATH`
+3. Local repo path (`emulators/fceux/fceux.exe`, `emulators/blastem/blastem.exe`)
+4. Auto-download (when running with emulator launch enabled)
+
+Auto-download requires internet access.
+- NES: latest FCEUX release from GitHub API (`TASEmulators/fceux`)
+- SMS: BlastEm package URL configured in the project
+
 ## Troubleshooting
 
 ### "wla-dx not found"
@@ -133,6 +154,7 @@ make  # or run build.bat on Windows
 - Verify the build completed successfully (check for `.sms` or `.bin` output)
 - Ensure the ROM file is >1KB (invalid builds create tiny files)
 - Check emulator compatibility with homebrew ROMs
+- For `bootstrap-hello`, validate first with `--no-run` to separate build issues from emulator setup
 
 ## Next Steps
 

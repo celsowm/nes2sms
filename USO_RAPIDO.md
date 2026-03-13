@@ -8,6 +8,44 @@ Para converter um ROM NES para SMS com um único comando:
 nes2sms convert --nes game.nes --out output_dir
 ```
 
+## Bootstrap Hello World NES -> SMS
+
+Para gerar um baseline homebrew (hello world), compilar NES, converter para SMS e abrir
+emuladores por padrao:
+
+```bash
+nes2sms bootstrap-hello
+```
+
+### Opcoes do `bootstrap-hello`
+
+```bash
+nes2sms bootstrap-hello [opcoes]
+```
+
+| Opcao | Descricao |
+|-------|-----------|
+| `--out` | Diretorio de saida (padrao: `out/hello_world`) |
+| `--no-run` | Nao abre emuladores (mas continua compilando NES e SMS) |
+| `--nes-emulator` | Caminho do executavel do emulador NES |
+| `--sms-emulator` | Caminho do executavel do emulador SMS |
+
+### Exemplos
+
+```bash
+# Fluxo completo (build + run NES/SMS)
+nes2sms bootstrap-hello
+
+# Fluxo sem abrir emuladores
+nes2sms bootstrap-hello --no-run
+
+# Definindo emuladores manualmente
+nes2sms bootstrap-hello --nes-emulator "C:\\Emulators\\fceux.exe" --sms-emulator "C:\\Emulators\\blastem.exe"
+```
+
+> Nota: sucesso neste ciclo significa ROM NES valida + ROM SMS gerada/compilada.
+> O resultado visual NES vs SMS nao e esperado ser 1:1.
+
 ### Opções do Comando `convert`
 
 ```bash

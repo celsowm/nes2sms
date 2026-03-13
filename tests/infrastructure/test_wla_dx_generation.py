@@ -37,7 +37,7 @@ class TestWlaDxTemplates:
 class TestStubGeneratorEntryPoint:
     """Validate GameMain routing in generated game_logic."""
 
-    def test_gamemain_jumps_to_reset_handler_when_available(self):
+    def test_gamemain_uses_halt_loop_with_reset_handler(self):
         symbols = [
             Symbol(
                 name="RESET_Handler",
@@ -53,9 +53,10 @@ class TestStubGeneratorEntryPoint:
         game_logic = generator.generate_game_logic_stub()
 
         assert "GameMain:" in game_logic
-        assert "    jp   RESET_Handler" in game_logic
+        assert ".main_loop:" in game_logic
+        assert "    halt" in game_logic
 
-    def test_gamemain_uses_reset_vector_comment_as_fallback(self):
+    def test_gamemain_uses_halt_loop_with_reset_comment(self):
         symbols = [
             Symbol(
                 name="sub_80DF",
@@ -70,7 +71,8 @@ class TestStubGeneratorEntryPoint:
         game_logic = generator.generate_game_logic_stub()
 
         assert "GameMain:" in game_logic
-        assert "    jp   sub_80DF" in game_logic
+        assert ".main_loop:" in game_logic
+        assert "    halt" in game_logic
 
     def test_gamemain_keeps_safe_loop_without_reset_target(self):
         symbols = [Symbol(name="sub_9000", address=0x9000, bank=0, type="code")]
