@@ -10,20 +10,24 @@ _INTERCEPTOR = HardwareInterceptorRegistry()
 
 
 def _hex8h(val: int) -> str:
-    """Format 8-bit value as WLA-DX hex (e.g., 0x42 -> 42h)."""
-    return f"{val:02X}h"
+    """Format 8-bit value as WLA-DX hex (e.g., 0xA2 -> 0A2h)."""
+    hex_str = f"{val:02X}"
+    if hex_str[0].isalpha():
+        return f"0{hex_str}h"
+    return f"{hex_str}h"
 
 
 def _hex16h(val: int) -> str:
-    """Format 16-bit value as WLA-DX hex (e.g., 0x1234 -> 1234h)."""
-    return f"{val:04X}h"
+    """Format 16-bit value as WLA-DX hex (e.g., 0xBCDE -> 0BCDEh)."""
+    hex_str = f"{val:04X}"
+    if hex_str[0].isalpha():
+        return f"0{hex_str}h"
+    return f"{hex_str}h"
 
 
-def _hex_paren(val: int, bits: int) -> str:
-    """Format address in parentheses with h suffix (e.g., 0x1234 -> (1234h)."""
-    if bits == 16:
-        return f"({_hex16h(val)})"
-    return f"({_hex8h(val)})"
+def _hex_paren(val: int, bits: int = 16) -> str:
+    """Format address in parentheses. Always use 16-bit for Z80 memory operands."""
+    return f"({_hex16h(val)})"
 
 
 def _normalize_hex(text: Optional[str]) -> str:
@@ -165,7 +169,7 @@ class StoreAccumulatorStrategy(TranslationStrategy):
                     return intercept
             return [f"    LD   {_hex_paren(addr_val, 8)}, a"]
 
-        elif mode == AddressingMode.ABSOLUTE_X:
+        elif mode in (AddressingMode.ABSOLUTE_X, AddressingMode.ZERO_PAGE_X):
             return [
                 f"    LD   hl, ${_hex16h(addr_val)}",
                 "    ADD  HL, BC",
@@ -205,10 +209,19 @@ class StoreXStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_write(val, "b")
                 if intercept:
                     return intercept
-                return [f"    LD   {_hex_paren(val, 8)}, b"]
-            return [f"    LD   ({instruction.operand_text}), b"]
+                return [
+                    f"    LD   hl, ${_hex16h(val)}",
+                    "    LD   (HL), b",
+                ]
+            return [
+                f"    LD   hl, {_normalize_hex(instruction.operand_text)}",
+                "    LD   (HL), b",
+            ]
 
-        return [f"    LD   ({instruction.operand_text}), b"]
+        return [
+            f"    LD   hl, {_normalize_hex(instruction.operand_text)}",
+            "    LD   (HL), b",
+        ]
 
 
 class StoreYStrategy(TranslationStrategy):
@@ -231,9 +244,15 @@ class StoreYStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_write(val, "c")
             if intercept:
                 return intercept
-            return [f"    LD   {_hex_paren(val, 8)}, c"]
+            return [
+                f"    LD   hl, ${_hex16h(val)}",
+                "    LD   (HL), c",
+            ]
 
-        return [f"    LD   ({instruction.operand_text}), c"]
+        return [
+            f"    LD   hl, {_normalize_hex(instruction.operand_text)}",
+            "    LD   (HL), c",
+        ]
 
 
 class LoadXStrategy(TranslationStrategy):
@@ -255,7 +274,10 @@ class LoadXStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_read(val, "b")
             if intercept:
                 return intercept
-            return [f"    LD   b, ${_hex8h(val)}"]
+            return [
+                f"    LD   hl, ${_hex16h(val)}",
+                "    LD   b, (HL)",
+            ]
         return [f"    LD   b, {instruction.operand_text}"]
 
 
@@ -278,11 +300,10 @@ class LoadYStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_read(val, "c")
             if intercept:
                 return intercept
-            return [f"    LD   c, ${_hex8h(val)}"]
-        elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
-            return [f"    LD   c, {_hex_paren(instruction.operand_value or 0, 16)}"]
-        elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
-            return [f"    LD   c, ${_hex8h(instruction.operand_value or 0)}"]
+            return [
+                f"    LD   hl, ${_hex16h(val)}",
+                "    LD   c, (HL)",
+            ]
         return [f"    LD   c, {instruction.operand_text}"]
 
 

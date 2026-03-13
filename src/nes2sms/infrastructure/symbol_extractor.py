@@ -231,7 +231,33 @@ class StaticSymbolExtractor:
         """Build symbol list from discovered addresses."""
         existing_addrs = {s.address for s in self.symbols}
 
-        for addr in sorted(self.code_addresses):
+        # When we have a disassembly database, only create symbols for
+        # JSR/JMP/branch targets (real entry points), not every visited byte
+        if self.disassembly_db:
+            target_addrs = set()
+            for instr in self.disassembly_db.instructions.values():
+                if instr.mnemonic in ("JSR", "JMP"):
+                    if instr.operands:
+                        try:
+                            target = instr.operands[0].strip("()")
+                            addr_val = int(target.lstrip("#$"), 16)
+                            if self._is_valid_address(addr_val):
+                                target_addrs.add(addr_val)
+                        except (ValueError, IndexError):
+                            pass
+                elif instr.mnemonic in ("BCC", "BCS", "BEQ", "BNE", "BMI", "BPL", "BVC", "BVS"):
+                    if instr.operands:
+                        try:
+                            addr_val = int(instr.operands[0].lstrip("$"), 16)
+                            if self._is_valid_address(addr_val):
+                                target_addrs.add(addr_val)
+                        except (ValueError, IndexError):
+                            pass
+            addresses_to_add = target_addrs
+        else:
+            addresses_to_add = self.code_addresses
+
+        for addr in sorted(addresses_to_add):
             if addr not in existing_addrs:
                 self.symbols.append(
                     Symbol(
@@ -260,262 +286,22 @@ class StaticSymbolExtractor:
         # Precomputed instruction size table for 6502
         SIZE_TABLE = bytes(
             [
-                1,
-                2,
-                3,
-                3,
-                2,
-                2,
-                3,
-                3,
-                1,
-                3,
-                0,
-                0,
-                2,
-                2,
-                3,
-                3,  # 0x00-0x0F
-                2,
-                2,
-                3,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                3,
-                2,
-                3,
-                3,  # 0x10-0x1F
-                3,
-                2,
-                3,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                3,
-                2,
-                3,
-                3,  # 0x20-0x2F
-                2,
-                2,
-                3,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0x30-0x3F
-                1,
-                2,
-                3,
-                3,
-                2,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                3,
-                2,
-                3,
-                3,  # 0x40-0x4F
-                2,
-                2,
-                3,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0x50-0x5F
-                1,
-                2,
-                3,
-                3,
-                2,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                3,
-                2,
-                3,
-                3,  # 0x60-0x6F
-                2,
-                2,
-                3,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0x70-0x7F
-                2,
-                2,
-                2,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0x80-0x8F
-                2,
-                2,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0x90-0x9F
-                2,
-                0,
-                2,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xA0-0xAF
-                2,
-                2,
-                0,
-                3,
-                2,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xB0-0xBF
-                2,
-                0,
-                2,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xC0-0xCF
-                2,
-                2,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xD0-0xDF
-                2,
-                0,
-                2,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                0,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xE0-0xEF
-                2,
-                2,
-                0,
-                3,
-                0,
-                2,
-                3,
-                3,
-                1,
-                2,
-                1,
-                3,
-                0,
-                2,
-                3,
-                3,  # 0xF0-0xFF
+                1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # 00-0F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # 10-1F
+                3, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # 20-2F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # 30-3F
+                1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # 40-4F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # 50-5F
+                1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # 60-6F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # 70-7F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 0, 1, 0, 3, 3, 3, 0, # 80-8F
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 0, 3, 0, 0, # 90-9F
+                2, 2, 2, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # A0-AF
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # B0-BF
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # C0-CF
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # D0-DF
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # E0-EF
+                2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # F0-FF
             ]
         )
 
