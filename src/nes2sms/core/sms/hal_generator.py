@@ -95,16 +95,77 @@ hal_apu_read:
 .export hal_input_read
 
 hal_input_write:
-    ; A = Value
-    ; L = Port (0 or 1)
-    ; TODO: Implement latching logic
-    RET
+    ; A = Value, L = Port (0 or 1)
+    ; When A=$01 (strobe high), latch the current button state
+    cp   $01
+    ret  nz
+    ld   a, l
+    or   a
+    jr   nz, _latch_p2
+    in   a, ($DC)
+    cpl
+    call _remap_sms_to_nes
+    ld   (_input_latch_p1), a
+    ret
+_latch_p2:
+    in   a, ($DD)
+    cpl
+    call _remap_sms_to_nes
+    ld   (_input_latch_p2), a
+    ret
+
+_remap_sms_to_nes:
+    ; Input A: SMS format (Up=b0,Down=b1,Left=b2,Right=b3,Btn1=b4,Btn2=b5)
+    ; Output A: NES serial order (A=b0,B=b1,Sel=b2,Start=b3,Up=b4,Down=b5,Left=b6,Right=b7)
+    push bc
+    ld   b, a
+    xor  a
+    bit  4, b
+    jr   z, +
+    set  0, a
++:  bit  5, b
+    jr   z, +
+    set  1, a
++:  bit  0, b
+    jr   z, +
+    set  4, a
++:  bit  1, b
+    jr   z, +
+    set  5, a
++:  bit  2, b
+    jr   z, +
+    set  6, a
++:  bit  3, b
+    jr   z, +
+    set  7, a
++:  pop  bc
+    ret
 
 hal_input_read:
     ; L = Port (0 or 1)
-    ; Returns A = Serialized button bits
-    ; Reads from SMS Ports $DC/$DD
-    RET
+    ; Returns bit 0 = current button state (NES serial style)
+    ; Each call shifts the latch right, returning one bit at a time
+    ld   a, l
+    or   a
+    jr   nz, _read_p2
+    ld   a, (_input_latch_p1)
+    ld   b, a
+    srl  a
+    ld   (_input_latch_p1), a
+    ld   a, b
+    and  $01
+    ret
+_read_p2:
+    ld   a, (_input_latch_p2)
+    ld   b, a
+    srl  a
+    ld   (_input_latch_p2), a
+    ld   a, b
+    and  $01
+    ret
+
+_input_latch_p1: .db $00
+_input_latch_p2: .db $00
 """
 
     def generate_oam_dma_routine(self) -> str:
@@ -112,12 +173,59 @@ hal_input_read:
 .export hal_oam_dma
 
 hal_oam_dma:
-    ; A = Page high byte (e.g., $02 for $0200)
-    ; Copies 256 bytes from (A:00) to VDP SAT (Sprite Attribute Table)
-    LD   h, a
-    LD   l, $00
-    ; TODO: Bulk copy to VDP
-    RET
+    ; A = NES page number (e.g., $02 for $0200)
+    ; Relocated to SMS RAM ($C0+page) automatically
+    ; Uploads to SMS VDP SAT at $3F00
+    push bc
+    push de
+    push hl
+
+    add  a, $C0       ; Relocate NES page to SMS RAM
+    ld   h, a
+    ld   l, $00       ; HL = source page in SMS RAM
+
+    ; --- First pass: write Y positions to SAT $3F00 ---
+    push hl
+    ld   a, $00
+    out  ($BF), a
+    ld   a, $7F       ; $3F00 | $40 (VDP write flag)
+    out  ($BF), a
+
+    ld   b, 64
+_oam_y_loop:
+    ld   a, (hl)      ; NES Y position (offset +0)
+    out  ($BE), a
+    inc  hl
+    inc  hl
+    inc  hl
+    inc  hl            ; skip 4 bytes to next sprite
+    djnz _oam_y_loop
+
+    ; --- Second pass: write X/tile pairs to SAT $3F80 ---
+    pop  hl
+    ld   a, $80
+    out  ($BF), a
+    ld   a, $7F       ; $3F80 | $40 (VDP write flag)
+    out  ($BF), a
+
+    ld   b, 64
+_oam_xt_loop:
+    inc  hl            ; skip Y (offset +0)
+    ld   a, (hl)      ; NES tile index (offset +1)
+    ld   d, a
+    inc  hl            ; skip attributes (offset +2)
+    inc  hl
+    ld   a, (hl)      ; NES X position (offset +3)
+    out  ($BE), a      ; write X
+    ld   a, d
+    out  ($BE), a      ; write tile
+    inc  hl            ; advance to next sprite
+    djnz _oam_xt_loop
+
+    pop  hl
+    pop  de
+    pop  bc
+    ret
 """
 
     def generate_utility_routines(self) -> str:

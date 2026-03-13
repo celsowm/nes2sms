@@ -173,14 +173,28 @@ def cmd_convert(args):
                     )
                 )
 
-        # Use flow-aware translator for better results
-        translator = FlowAwareTranslator()
+        # Build symbol address map for label resolution
+        symbol_address_map = {}
+        for s in symbol_objects:
+            symbol_address_map[s.address] = s.name
+
+        # Use flow-aware translator with symbol map
+        translator = FlowAwareTranslator(symbol_map=symbol_address_map)
+
+        # Parse data ranges from symbol dict
+        data_ranges = []
+        for dr_str in symbol_dict.get("data_ranges", []):
+            parts = dr_str.replace("$", "").split("-")
+            if len(parts) == 2:
+                data_ranges.append((int(parts[0], 16), int(parts[1], 16)))
 
         stub_gen = StubGenerator(
             symbols=symbol_objects,
             translator=translator,
             enable_translation=True,
             use_flow_aware=True,
+            prg_data=loader.prg_data,
+            data_ranges=data_ranges,
         )
         stub_gen.write_stubs(out_dir)
 
@@ -675,6 +689,15 @@ def _detect_emulator() -> Optional[str]:
         path = shutil.which(exe)
         if path:
             return path
+
+    # Check project-local emulators directory
+    project_emulator_dir = Path(__file__).resolve().parents[4] / "emulators"
+    if project_emulator_dir.exists():
+        for exe in emulators:
+            # Search recursively
+            for match in project_emulator_dir.rglob(exe):
+                if match.is_file():
+                    return str(match)
 
     # Check common installation directories
     common_paths = [

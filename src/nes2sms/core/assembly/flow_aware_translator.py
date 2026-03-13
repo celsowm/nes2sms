@@ -1,6 +1,6 @@
 """Flow-aware translator for 6502 to Z80."""
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .control_flow_analyzer import ControlFlowAnalyzer
 from .translation_context import TranslationContext
@@ -21,6 +21,7 @@ class FlowAwareTranslator(ITranslator):
         self,
         instruction_translator: Optional[InstructionTranslator] = None,
         flow_analyzer: Optional[ControlFlowAnalyzer] = None,
+        symbol_map: Optional[Dict[int, str]] = None,
     ):
         """
         Initialize flow-aware translator.
@@ -28,10 +29,12 @@ class FlowAwareTranslator(ITranslator):
         Args:
             instruction_translator: Base instruction translator
             flow_analyzer: Control flow analyzer
+            symbol_map: Address-to-label map for resolving jump/call targets
         """
         self.instruction_translator = instruction_translator or InstructionTranslator()
         self.flow_analyzer = flow_analyzer or ControlFlowAnalyzer()
         self.context = TranslationContext()
+        self.symbol_map = symbol_map or {}
 
     def translate_line(self, line: str, address: Optional[int] = None) -> str:
         """
@@ -143,19 +146,20 @@ class FlowAwareTranslator(ITranslator):
 
         target = instr.operands[0]
 
-        # Calculate absolute address from relative offset
+        # Parse target address
         target_addr = None
         if target.startswith("$") or target.startswith("#$"):
-            # Extract numeric value
             clean_target = target.lstrip("#$")
             try:
-                offset_val = int(clean_target, 16)
-                # Sign-extend if high bit is set (branch offset)
-                if offset_val >= 0x80:
-                    offset_val = offset_val - 0x100
-                # Calculate absolute address: current + 2 (branch size) + offset
-                target_addr = (instr.address + 2 + offset_val) & 0xFFFF
-                # Use absolute address in hex format
+                val = int(clean_target, 16)
+                if val <= 0xFF:
+                    # Relative offset (1-byte): sign-extend and compute absolute
+                    if val >= 0x80:
+                        val = val - 0x100
+                    target_addr = (instr.address + 2 + val) & 0xFFFF
+                else:
+                    # Already an absolute address from the disassembler
+                    target_addr = val
                 target = f"${target_addr:04X}"
             except ValueError:
                 pass
@@ -163,6 +167,12 @@ class FlowAwareTranslator(ITranslator):
         # Check if target is a known label (via loop labels)
         if target_addr and target_addr in self.context.loop_labels:
             target_label = self.context.loop_labels[target_addr]
+            self.context.add_code(f"    JP   {condition}, {target_label}")
+            return
+
+        # Check symbol map for known subroutine/label addresses
+        if target_addr and target_addr in self.symbol_map:
+            target_label = self.symbol_map[target_addr]
             self.context.add_code(f"    JP   {condition}, {target_label}")
             return
 
@@ -177,22 +187,32 @@ class FlowAwareTranslator(ITranslator):
         target_addr = self._parse_address(target)
         if target_addr and target_addr in self.context.loop_labels:
             target_label = self.context.loop_labels[target_addr]
-            self.context.add_code(f"    JR   {target_label}")
+            self.context.add_code(f"    JP   {target_label}")
+        elif target_addr and target_addr in self.symbol_map:
+            target_label = self.symbol_map[target_addr]
+            self.context.add_code(f"    JP   {target_label}")
         else:
             self.context.add_code(f"    JP   {target}")
 
     def _translate_call(self, instr: ParsedInstruction):
         """Translate JSR instruction."""
         target = instr.operands[0] if instr.operands else "unknown"
-        self.context.add_code(f"    CALL {target}")
+        target_addr = self._parse_address(target)
+
+        if target_addr and target_addr in self.symbol_map:
+            target_label = self.symbol_map[target_addr]
+            self.context.add_code(f"    CALL {target_label}")
+        else:
+            self.context.add_code(f"    CALL {target}")
 
     def _translate_return(self, instr: ParsedInstruction):
-        """Translate RTS/RTI instruction."""
-        if instr.mnemonic == "RTI":
-            self.context.add_code("    EI")
-            self.context.add_code("    RETI")
-        else:
-            self.context.add_code("    RET")
+        """Translate RTS/RTI instruction.
+
+        Both RTS and RTI map to RET on SMS. The NES RTI returns from
+        an interrupt, but on SMS the NMI_Handler is called via CALL
+        from INT_Handler which owns the EI/RETI sequence.
+        """
+        self.context.add_code("    RET")
 
     def _translate_regular(self, instr: ParsedInstruction):
         """Translate regular instruction."""

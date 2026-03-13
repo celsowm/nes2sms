@@ -8,6 +8,18 @@ from .hardware_interceptor import HardwareInterceptorRegistry
 # Central registry for hardware redirection
 _INTERCEPTOR = HardwareInterceptorRegistry()
 
+# NES RAM ($0000-$07FF) is relocated to SMS RAM ($C000-$C7FF)
+NES_RAM_BASE = 0x0000
+NES_RAM_END = 0x07FF
+SMS_RAM_BASE = 0xC000
+
+
+def _relocate_address(addr: int) -> int:
+    """Relocate NES RAM address to SMS RAM space."""
+    if NES_RAM_BASE <= addr <= NES_RAM_END:
+        return addr + SMS_RAM_BASE
+    return addr
+
 
 def _hex8h(val: int) -> str:
     """Format 8-bit value as WLA-DX hex (e.g., 0xA2 -> 0A2h)."""
@@ -112,9 +124,9 @@ class LoadAccumulatorStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_read(addr_val, "a")
                 if intercept:
                     return intercept
-
+                relocated = _relocate_address(addr_val)
                 return [
-                    f"    LD   hl, ${_hex16h(addr_val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   a, (HL)",
                 ]
             return ["    ; TODO: LDA"]
@@ -124,19 +136,26 @@ class LoadAccumulatorStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_read(addr_val, "a")
                 if intercept:
                     return intercept
-            return [f"    LD   a, {_hex_paren(addr_val or 0, 8)}"]
+            relocated = _relocate_address(addr_val or 0)
+            return [f"    LD   a, {_hex_paren(relocated, 8)}"]
 
         elif mode == AddressingMode.ABSOLUTE_X:
+            relocated = _relocate_address(addr_val or 0)
             return [
-                f"    LD   hl, ${_hex16h(addr_val or 0)}",
-                "    ADD  HL, BC",
+                "    LD   e, b",
+                "    LD   d, 0",
+                f"    LD   hl, ${_hex16h(relocated)}",
+                "    ADD  HL, DE",
                 "    LD   a, (HL)",
             ]
 
         elif mode == AddressingMode.ABSOLUTE_Y:
+            relocated = _relocate_address(addr_val or 0)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
-                "    ADD  HL, BC",
+                "    LD   e, c",
+                "    LD   d, 0",
+                f"    LD   hl, ${_hex16h(relocated)}",
+                "    ADD  HL, DE",
                 "    LD   a, (HL)",
             ]
 
@@ -156,9 +175,9 @@ class StoreAccumulatorStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_write(addr_val, "a")
                 if intercept:
                     return intercept
-
+                relocated = _relocate_address(addr_val)
                 return [
-                    f"    LD   hl, ${_hex16h(addr_val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   (HL), a",
                 ]
 
@@ -167,19 +186,26 @@ class StoreAccumulatorStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_write(addr_val, "a")
                 if intercept:
                     return intercept
-            return [f"    LD   {_hex_paren(addr_val, 8)}, a"]
+            relocated = _relocate_address(addr_val or 0)
+            return [f"    LD   {_hex_paren(relocated, 8)}, a"]
 
         elif mode in (AddressingMode.ABSOLUTE_X, AddressingMode.ZERO_PAGE_X):
+            relocated = _relocate_address(addr_val)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
-                "    ADD  HL, BC",
+                "    LD   e, b",
+                "    LD   d, 0",
+                f"    LD   hl, ${_hex16h(relocated)}",
+                "    ADD  HL, DE",
                 "    LD   (HL), a",
             ]
 
         elif mode == AddressingMode.ABSOLUTE_Y:
+            relocated = _relocate_address(addr_val)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
-                "    ADD  HL, BC",
+                "    LD   e, c",
+                "    LD   d, 0",
+                f"    LD   hl, ${_hex16h(relocated)}",
+                "    ADD  HL, DE",
                 "    LD   (HL), a",
             ]
 
@@ -198,8 +224,9 @@ class StoreXStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_write(val, "b")
                 if intercept:
                     return intercept
+                relocated = _relocate_address(val)
                 return [
-                    f"    LD   hl, ${_hex16h(val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   (HL), b",
                 ]
             return [f"    LD   ({instruction.operand_text}), b"]
@@ -209,8 +236,9 @@ class StoreXStrategy(TranslationStrategy):
                 intercept = _INTERCEPTOR.intercept_write(val, "b")
                 if intercept:
                     return intercept
+                relocated = _relocate_address(val)
                 return [
-                    f"    LD   hl, ${_hex16h(val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   (HL), b",
                 ]
             return [
@@ -235,8 +263,9 @@ class StoreYStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_write(val, "c")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   (HL), c",
             ]
 
@@ -244,8 +273,9 @@ class StoreYStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_write(val, "c")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   (HL), c",
             ]
 
@@ -266,16 +296,18 @@ class LoadXStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_read(val, "b")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   b, (HL)",
             ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
             intercept = _INTERCEPTOR.intercept_read(val, "b")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   b, (HL)",
             ]
         return [f"    LD   b, {instruction.operand_text}"]
@@ -292,16 +324,18 @@ class LoadYStrategy(TranslationStrategy):
             intercept = _INTERCEPTOR.intercept_read(val, "c")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   c, (HL)",
             ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
             intercept = _INTERCEPTOR.intercept_read(val, "c")
             if intercept:
                 return intercept
+            relocated = _relocate_address(val)
             return [
-                f"    LD   hl, ${_hex16h(val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   c, (HL)",
             ]
         return [f"    LD   c, {instruction.operand_text}"]
@@ -427,13 +461,15 @@ class IncrementDecrementStrategy(TranslationStrategy):
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
             op = "INC" if mnemonic == "INC" else "DEC"
             addr_val = instruction.operand_value or 0
+            relocated = _relocate_address(addr_val)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 f"    {op}  (HL)",
             ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
             op = "INC" if mnemonic == "INC" else "DEC"
-            return [f"    {op}  {_hex_paren(instruction.operand_value or 0, 8)}"]
+            relocated = _relocate_address(instruction.operand_value or 0)
+            return [f"    {op}  {_hex_paren(relocated, 8)}"]
 
         return [f"    ; TODO: {mnemonic} {instruction.operand_text}"]
 
@@ -463,8 +499,9 @@ class ArithmeticLogicStrategy(TranslationStrategy):
             return [f"    {z80_op}  ${_hex8h(instruction.operand_value or 0)}"]
 
         elif instruction.addressing_mode in (AddressingMode.ABSOLUTE, AddressingMode.ZERO_PAGE):
-            addr = _normalize_hex(instruction.operand_text)
-            return [f"    LD   hl, ${addr}", f"    {z80_op}  (HL)"]
+            addr_val = instruction.operand_value or 0
+            relocated = _relocate_address(addr_val)
+            return [f"    LD   hl, ${_hex16h(relocated)}", f"    {z80_op}  (HL)"]
 
         return [f"    {z80_op}  {instruction.operand_text}"]
 
@@ -480,8 +517,9 @@ class CompareRegisterStrategy(TranslationStrategy):
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
             return [f"    LD   a, ${_hex8h(addr_val)}", f"    CP   {reg}"]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
+            relocated = _relocate_address(addr_val)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    LD   a, (HL)",
                 f"    CP   {reg}",
             ]
@@ -513,24 +551,26 @@ class ShiftRotateStrategy(TranslationStrategy):
         # Memory operations
         if instruction.addressing_mode == AddressingMode.ABSOLUTE:
             addr_val = instruction.operand_value or 0
+            relocated = _relocate_address(addr_val)
             op = self.OPCODE_MAP.get(mnemonic, "NOP")
             if mnemonic == "ASL":
                 return [
-                    f"    LD   hl, ${_hex16h(addr_val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   a, (HL)",
                     "    ADD  A",
                     "    LD   (HL), a",
                 ]
             else:
                 return [
-                    f"    LD   hl, ${_hex16h(addr_val)}",
+                    f"    LD   hl, ${_hex16h(relocated)}",
                     "    LD   a, (HL)",
                     f"    {op}  A",
                     "    LD   (HL), a",
                 ]
         elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
             op = self.OPCODE_MAP.get(mnemonic, "NOP")
-            addr = _normalize_hex_paren(instruction.operand_text, force_paren=True)
+            relocated = _relocate_address(instruction.operand_value or 0)
+            addr = f"({_hex16h(relocated)})"
             if mnemonic == "ASL":
                 return [
                     f"    LD   a, {addr}",
@@ -568,8 +608,9 @@ class BitTestStrategy(TranslationStrategy):
                 return intercept + ["    AND  A"]
 
             # Normal memory BIT: AND a, (hl) but without affecting A
+            relocated = _relocate_address(addr_val)
             return [
-                f"    LD   hl, ${_hex16h(addr_val)}",
+                f"    LD   hl, ${_hex16h(relocated)}",
                 "    PUSH AF",
                 "    AND  (HL)",
                 "    POP  AF",
