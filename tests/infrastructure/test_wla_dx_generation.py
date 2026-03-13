@@ -3,7 +3,7 @@
 import re
 
 from nes2sms.infrastructure.wla_dx.stub_generator import StubGenerator
-from nes2sms.infrastructure.wla_dx.templates import ASSETS_ASM, INIT_ASM
+from nes2sms.infrastructure.wla_dx.templates import ASSETS_ASM, INIT_ASM, INTERRUPTS_ASM
 from nes2sms.shared.models import Symbol
 
 
@@ -19,6 +19,7 @@ class TestWlaDxTemplates:
         """LoadTiles must copy tile data to VRAM, not immediate return."""
         assert not re.search(r"(?ms)^\s*LoadTiles:\s*ret\b", ASSETS_ASM)
         assert "ld   hl, $0000" in ASSETS_ASM
+        assert "ld   bc, Tiles_End - Tiles" in ASSETS_ASM
 
     def test_loadtilemap_populates_name_table(self):
         """LoadTilemap should write visible entries to name table."""
@@ -33,11 +34,16 @@ class TestWlaDxTemplates:
         assert "call LoadTilemap" in INIT_ASM
         assert "ld   ($FFFF), a" not in INIT_ASM
 
+    def test_interrupt_handler_always_dispatches_nmi_handler(self):
+        """INT handler should always dispatch to game NMI routine."""
+        assert "call NMI_Handler" in INTERRUPTS_ASM
+        assert ".ifdef NMI_Handler" not in INTERRUPTS_ASM
+
 
 class TestStubGeneratorEntryPoint:
     """Validate GameMain routing in generated game_logic."""
 
-    def test_gamemain_uses_halt_loop_with_reset_handler(self):
+    def test_gamemain_jumps_to_reset_handler_symbol(self):
         symbols = [
             Symbol(
                 name="RESET_Handler",
@@ -53,10 +59,9 @@ class TestStubGeneratorEntryPoint:
         game_logic = generator.generate_game_logic_stub()
 
         assert "GameMain:" in game_logic
-        assert ".main_loop:" in game_logic
-        assert "    halt" in game_logic
+        assert "    jp   RESET_Handler" in game_logic
 
-    def test_gamemain_uses_halt_loop_with_reset_comment(self):
+    def test_gamemain_jumps_to_reset_handler_by_comment(self):
         symbols = [
             Symbol(
                 name="sub_80DF",
@@ -71,8 +76,7 @@ class TestStubGeneratorEntryPoint:
         game_logic = generator.generate_game_logic_stub()
 
         assert "GameMain:" in game_logic
-        assert ".main_loop:" in game_logic
-        assert "    halt" in game_logic
+        assert "    jp   sub_80DF" in game_logic
 
     def test_gamemain_keeps_safe_loop_without_reset_target(self):
         symbols = [Symbol(name="sub_9000", address=0x9000, bank=0, type="code")]
@@ -83,3 +87,21 @@ class TestStubGeneratorEntryPoint:
         assert "GameMain:" in game_logic
         assert ".main_loop:" in game_logic
         assert "    halt" in game_logic
+
+    def test_brk_translation_does_not_leave_todo_placeholder(self):
+        symbols = [
+            Symbol(
+                name="sub_83ED",
+                address=0x83ED,
+                bank=0,
+                type="code",
+                disassembly_snippet="BRK",
+            )
+        ]
+        generator = StubGenerator(symbols=symbols, enable_translation=True, use_flow_aware=False)
+
+        game_logic = generator.generate_game_logic_stub()
+
+        assert "sub_83ED:" in game_logic
+        assert "TODO: BRK" not in game_logic
+        assert "    RET" in game_logic

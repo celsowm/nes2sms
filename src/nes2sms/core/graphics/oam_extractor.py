@@ -81,6 +81,58 @@ class OamExtractor:
             return False
         return True
 
+    @staticmethod
+    def build_tile_activity(tiles: List[bytes]) -> List[bool]:
+        """Build a per-tile visibility mask from converted tile data."""
+        return [any(tile) for tile in tiles]
+
+    @staticmethod
+    def nonempty_tile_ratio(sprites: List[Dict], tile_activity: Optional[List[bool]]) -> float:
+        """
+        Calculate how many referenced sprite tiles are visually non-empty.
+
+        Returns:
+            Ratio in range [0.0, 1.0]. Returns 1.0 when no activity map is provided.
+        """
+        if not sprites:
+            return 0.0
+        if tile_activity is None:
+            return 1.0
+
+        referenced_tiles = [
+            spr["tile"]
+            for spr in sprites
+            if isinstance(spr.get("tile"), int) and 0 <= spr["tile"] < len(tile_activity)
+        ]
+        if not referenced_tiles:
+            return 0.0
+
+        nonempty_count = sum(1 for tile in referenced_tiles if tile_activity[tile])
+        return nonempty_count / len(referenced_tiles)
+
+    @classmethod
+    def is_confident_table(
+        cls,
+        sprites: List[Dict],
+        tile_activity: Optional[List[bool]] = None,
+        min_nonempty_ratio: float = 0.5,
+    ) -> bool:
+        """
+        Validate whether an extracted OAM table is likely to be real sprite data.
+
+        A table is considered low confidence when most referenced tiles are empty
+        after graphics conversion.
+        """
+        if not sprites or len(sprites) < 3:
+            return False
+        if tile_activity is None:
+            return True
+
+        ratio = cls.nonempty_tile_ratio(sprites, tile_activity)
+        if ratio < min_nonempty_ratio:
+            return False
+        return True
+
     def to_sms_sat(self, sprites: List[Dict]) -> Tuple[bytes, bytes]:
         """
         Convert NES OAM entries to SMS SAT format.

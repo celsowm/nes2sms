@@ -496,14 +496,32 @@ class ArithmeticLogicStrategy(TranslationStrategy):
             return [f"    ; TODO: {mnemonic}"]
 
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
-            return [f"    {z80_op}  ${_hex8h(instruction.operand_value or 0)}"]
+            imm = f"    {z80_op}  ${_hex8h(instruction.operand_value or 0)}"
+            if mnemonic == "SBC":
+                # 6502 carry is "no borrow", Z80 carry is "borrow".
+                return ["    CCF", imm, "    CCF"]
+            if mnemonic == "CMP":
+                return [imm, "    CCF"]
+            return [imm]
 
         elif instruction.addressing_mode in (AddressingMode.ABSOLUTE, AddressingMode.ZERO_PAGE):
             addr_val = instruction.operand_value or 0
             relocated = _relocate_address(addr_val)
-            return [f"    LD   hl, ${_hex16h(relocated)}", f"    {z80_op}  (HL)"]
+            lines = [f"    LD   hl, ${_hex16h(relocated)}"]
+            if mnemonic == "SBC":
+                lines.append("    CCF")
+            lines.append(f"    {z80_op}  (HL)")
+            if mnemonic in {"SBC", "CMP"}:
+                lines.append("    CCF")
+            return lines
 
-        return [f"    {z80_op}  {instruction.operand_text}"]
+        lines = []
+        if mnemonic == "SBC":
+            lines.append("    CCF")
+        lines.append(f"    {z80_op}  {instruction.operand_text}")
+        if mnemonic in {"SBC", "CMP"}:
+            lines.append("    CCF")
+        return lines
 
 
 class CompareRegisterStrategy(TranslationStrategy):
@@ -515,17 +533,42 @@ class CompareRegisterStrategy(TranslationStrategy):
         addr_val = instruction.operand_value or 0
 
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
-            return [f"    LD   a, ${_hex8h(addr_val)}", f"    CP   {reg}"]
+            return [
+                "    LD   d, a",
+                f"    LD   a, {reg}",
+                f"    CP   ${_hex8h(addr_val)}",
+                "    CCF",
+                "    LD   a, d",
+            ]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
             relocated = _relocate_address(addr_val)
             return [
+                "    LD   d, a",
                 f"    LD   hl, ${_hex16h(relocated)}",
-                "    LD   a, (HL)",
-                f"    CP   {reg}",
+                f"    LD   a, {reg}",
+                "    CP   (HL)",
+                "    CCF",
+                "    LD   a, d",
+            ]
+        elif instruction.addressing_mode == AddressingMode.ZERO_PAGE:
+            relocated = _relocate_address(addr_val)
+            return [
+                "    LD   d, a",
+                f"    LD   hl, ${_hex16h(relocated)}",
+                f"    LD   a, {reg}",
+                "    CP   (HL)",
+                "    CCF",
+                "    LD   a, d",
             ]
 
         addr = _normalize_hex_paren(instruction.operand_text)
-        return [f"    LD   a, {addr}", f"    CP   {reg}"]
+        return [
+            "    LD   d, a",
+            f"    LD   a, {reg}",
+            f"    CP   {addr}",
+            "    CCF",
+            "    LD   a, d",
+        ]
 
 
 class ShiftRotateStrategy(TranslationStrategy):
@@ -592,6 +635,14 @@ class NopStrategy(TranslationStrategy):
 
     def translate(self, instruction: ParsedInstruction) -> List[str]:
         return ["    NOP"]
+
+
+class BreakStrategy(TranslationStrategy):
+    """Translation strategy for BRK instruction."""
+
+    def translate(self, instruction: ParsedInstruction) -> List[str]:
+        # Phase 1 fallback: treat BRK as a soft-abort path and return.
+        return ["    RET"]
 
 
 class BitTestStrategy(TranslationStrategy):

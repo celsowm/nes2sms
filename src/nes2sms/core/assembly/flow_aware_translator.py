@@ -133,7 +133,7 @@ class FlowAwareTranslator(ITranslator):
             "BEQ": "Z",
             "BNE": "NZ",
             "BMI": "M",
-            "BPL": "NZ",
+            "BPL": "P",
             "BVC": "PO",
             "BVS": "PE",
         }

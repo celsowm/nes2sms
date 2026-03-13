@@ -136,6 +136,48 @@ O comando `convert` executa automaticamente:
 5. **Stub Generation** - Gera stubs Z80 para cada rotina encontrada
 6. **Build** (opcional) - Compila com WLA-DX
 
+## Rodar ROM Gerada a Partir de uma Pasta
+
+Use o script PowerShell abaixo passando a pasta de saida do projeto:
+
+```powershell
+.\run_sms.ps1 out/pong_sms
+```
+
+Com emulador customizado:
+
+```powershell
+.\run_sms.ps1 out/pong_sms -EmulatorPath "C:\Emulators\blastem.exe"
+```
+
+Modo debug (abre BlastEm no debugger CLI):
+
+```powershell
+.\run_sms.ps1 out/pong_sms -DebugCLI
+```
+
+Modo GDB remote stub:
+
+```powershell
+.\run_sms.ps1 out/pong_sms -GdbStub
+```
+
+> Nota: algumas versões do BlastEm não suportam `-D`. O script detecta isso e ignora a flag automaticamente.
+
+## Coleta Automática de Artefatos de Debug (sem interação manual)
+
+Gera artefatos estáticos e capturas automáticas do emulador (jogo, VRAM debug e CRAM debug):
+
+```powershell
+.\capture_sms_debug_artifacts.ps1 out/pong_sms
+```
+
+Com diretório de saída customizado:
+
+```powershell
+.\capture_sms_debug_artifacts.ps1 out/pong_sms -OutDir out/pong_sms/debug_artifacts/latest
+```
+
 ## Tradução 6502→Z80
 
 Com `--translate`, o conversor gera código Z80 traduzido automaticamente:

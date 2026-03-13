@@ -25,6 +25,7 @@ MAIN_ASM = """
 ; Tiles takes 16KB, putting in its own bank
 Tiles:
     .INCBIN "assets/tiles.bin"
+Tiles_End:
 .ENDS
 
 .SECTION "Assets_Small" BANK 0 SLOT 0 FREE
@@ -98,9 +99,7 @@ INT_Handler:
     push de
     push hl
     in   a, ($BF)
-    .ifdef NMI_Handler
-        call NMI_Handler
-    .endif
+    call NMI_Handler
     pop hl
     pop de
     pop bc
@@ -136,7 +135,7 @@ LoadTiles:
     ld   hl, $0000
     call VDP_SetWriteAddress
     ld   hl, Tiles
-    ld   bc, $2000 
+    ld   bc, Tiles_End - Tiles
     call VDP_CopyBytes
     ret
 
@@ -371,6 +370,11 @@ UpdateSAT:
 GAME_STUBS_EMPTY = """
 
 ; Add your stubs here
+
+.ifndef NMI_Handler
+NMI_Handler:
+    ret
+.endif
 """
 
 MAKEFILE_CONTENT = """# WLA-DX Makefile for SMS project

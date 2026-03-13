@@ -23,6 +23,7 @@ from .strategies import (
     CompareRegisterStrategy,
     ShiftRotateStrategy,
     NopStrategy,
+    BreakStrategy,
     BitTestStrategy,
 )
 from ..sms.hal_generator import HALGenerator
@@ -96,6 +97,7 @@ class InstructionTranslator:
         self.register_strategy("ROL", ShiftRotateStrategy())
         self.register_strategy("ROR", ShiftRotateStrategy())
         self.register_strategy("NOP", NopStrategy())
+        self.register_strategy("BRK", BreakStrategy())
         self.register_strategy("BIT", BitTestStrategy())
 
         # Branch instructions

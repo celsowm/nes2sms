@@ -219,6 +219,11 @@ class StubGenerator:
             "; Generated stubs — one per NES subroutine",
             "; Replace each stub body with ported Z80 code.",
             "",
+            ".ifndef NMI_Handler",
+            "NMI_Handler:",
+            "    ret",
+            ".endif",
+            "",
         ]
         return "\n".join(lines)
 

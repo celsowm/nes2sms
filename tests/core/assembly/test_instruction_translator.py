@@ -82,8 +82,8 @@ class TestInstructionTranslator:
 
     def test_translate_sta_absolute(self):
         """Test STA abs translation."""
-        result = self.translator.translate_line("STA $2000")
-        assert "LD   hl, $2000h" in result
+        result = self.translator.translate_line("STA $1234")
+        assert "LD   hl, $1234h" in result
         assert "LD   (HL), a" in result
 
     def test_translate_ldx(self):
@@ -99,7 +99,8 @@ class TestInstructionTranslator:
     def test_translate_stx(self):
         """Test STX translation."""
         result = self.translator.translate_line("STX $00")
-        assert "LD   (00h), b" in result
+        assert "LD   hl, $0C000h" in result
+        assert "LD   (HL), b" in result
 
     def test_translate_add(self):
         """Test ADD translation."""
@@ -110,6 +111,13 @@ class TestInstructionTranslator:
         """Test SUB/SBC translation."""
         result = self.translator.translate_line("SBC #$01")
         assert "SBC" in result
+        assert result.count("CCF") == 2
+
+    def test_translate_adc_keeps_native_carry_semantics(self):
+        """ADC should not invert carry before/after operation."""
+        result = self.translator.translate_line("ADC #$01")
+        assert "ADC" in result
+        assert "CCF" not in result
 
     def test_translate_and(self):
         """Test AND translation."""
@@ -130,6 +138,25 @@ class TestInstructionTranslator:
         """Test CMP translation."""
         result = self.translator.translate_line("CMP #$42")
         assert "CP" in result
+        assert "CCF" in result
+
+    def test_translate_cpx_immediate_preserves_a(self):
+        """CPX #imm should compare X(B) without clobbering A."""
+        result = self.translator.translate_line("CPX #$20")
+        assert "LD   d, a" in result
+        assert "LD   a, B" in result
+        assert "CP   $20" in result
+        assert "CCF" in result
+        assert "LD   a, d" in result
+
+    def test_translate_cpy_immediate_preserves_a(self):
+        """CPY #imm should compare Y(C) without clobbering A."""
+        result = self.translator.translate_line("CPY #$08")
+        assert "LD   d, a" in result
+        assert "LD   a, C" in result
+        assert "CP   $08" in result
+        assert "CCF" in result
+        assert "LD   a, d" in result
 
     def test_translate_jmp(self):
         """Test JMP translation."""
@@ -212,6 +239,12 @@ class TestInstructionTranslator:
         """Test NOP translation."""
         result = self.translator.translate_line("NOP")
         assert "NOP" in result
+
+    def test_translate_brk(self):
+        """BRK should be translated to a functional fallback path."""
+        result = self.translator.translate_line("BRK")
+        assert "TODO" not in result
+        assert "RET" in result
 
     def test_translate_clc(self):
         """Test CLC translation."""

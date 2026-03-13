@@ -104,6 +104,7 @@ def cmd_convert(args):
 
     # Step 4: Convert graphics
     print("[4/6] Converting graphics...")
+    tile_result = None
     if loader.chr_data:
         # Try to extract actual palette from PRG code
         nes_palette_ram = None
@@ -128,6 +129,7 @@ def cmd_convert(args):
             print(f"      Multi-bank mode: {len(chr_banks)} banks")
         else:
             result = tile_converter.convert(loader.chr_data, bank_id=0)
+        tile_result = result
 
         writer.write_palette(bg_pal, "bg")
         writer.write_palette(spr_pal, "spr")
@@ -145,12 +147,31 @@ def cmd_convert(args):
     if loader.prg_data and loader.chr_data:
         chr_tile_count = len(loader.chr_data) // 16
         oam_extractor = OamExtractor(loader.prg_data, chr_tile_count)
-        oam_sprites = oam_extractor.extract_oam_table()
+        extracted_oam = oam_extractor.extract_oam_table()
+        if extracted_oam:
+            tile_activity = None
+            if tile_result is not None:
+                tile_activity = OamExtractor.build_tile_activity(tile_result.sms_tiles)
+
+            ratio = OamExtractor.nonempty_tile_ratio(extracted_oam, tile_activity)
+            if OamExtractor.is_confident_table(extracted_oam, tile_activity=tile_activity):
+                oam_sprites = extracted_oam
+            else:
+                print(
+                    f"[4b] Ignoring low-confidence OAM table ({ratio:.0%} referenced tiles are non-empty)"
+                )
+                print("      Falling back to neutral SAT initialization")
+                print()
+
         if oam_sprites:
             print(f"[4b] Extracted {len(oam_sprites)} sprites from OAM data")
             y_table, xt_table = oam_extractor.to_sms_sat(oam_sprites)
             writer.write_binary("sat_y.bin", y_table, "assets")
             writer.write_binary("sat_xt.bin", xt_table, "assets")
+            if tile_result is not None:
+                tile_activity = OamExtractor.build_tile_activity(tile_result.sms_tiles)
+                ratio = OamExtractor.nonempty_tile_ratio(oam_sprites, tile_activity)
+                print(f"      OAM confidence: {ratio:.0%} referenced tiles are non-empty")
             print()
 
     # Step 5: Generate Z80 stubs with translation
@@ -382,7 +403,7 @@ def _build_rom(out_dir: Path) -> bool:
         return False
 
 
-def _generate_assets_with_oam(oam_sprites: list) -> str:
+def _generate_assets_with_oam(oam_sprites: list, blank_tile_index: int = 0) -> str:
     """
     Generate assets.asm with proper SAT loading from extracted NES OAM data.
 
@@ -394,8 +415,6 @@ def _generate_assets_with_oam(oam_sprites: list) -> str:
     # Build X/tile pairs
     xt_bytes = ", ".join(f"${s['x']:02X},${s['tile']:02X}" for s in oam_sprites)
     num_sprites = len(oam_sprites)
-    # First blank tile index (one past the highest used sprite tile)
-    num_sprites_tiles = max(s['tile'] for s in oam_sprites) + 1
 
     return f"""
 .export LoadPalettes
@@ -426,12 +445,12 @@ LoadTiles:
 
 .export LoadTilemap
 LoadTilemap:
-    ; Clear name table with a blank tile (first empty tile after sprite tiles)
+    ; Clear name table with a conservative blank tile index.
     ld   hl, $3800
     call VDP_SetWriteAddress
     ld   bc, $0380 ; 32x28 entries
 .tilemap_loop:
-    ld   a, {num_sprites_tiles}
+    ld   a, {blank_tile_index}
     out  ($BE), a
     xor  a
     out  ($BE), a
