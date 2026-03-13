@@ -141,18 +141,31 @@ LoadTiles:
 
 .export LoadTilemap
 LoadTilemap:
-    ; Clear name table to tile 0
+    ; Clear name table and apply coarse priority zoning.
     ld   hl, $3800
     call VDP_SetWriteAddress
-    ld   bc, $0380 ; 32x28 entries x 2 bytes
-.tilemap_loop:
+    ld   d, 0
+.row_loop:
+    ld   e, 32
+    ld   a, d
+    cp   PRIORITY_SPLIT_TILE
+    jr   c, .row_no_prio
+    ld   c, $10
+    jr   .row_prio_ready
+.row_no_prio:
+    ld   c, $00
+.row_prio_ready:
+.col_loop:
     xor  a
     out  ($BE), a
+    ld   a, c
     out  ($BE), a
-    dec  bc
-    ld   a, b
-    or   c
-    jr   nz, .tilemap_loop
+    dec  e
+    jr   nz, .col_loop
+    inc  d
+    ld   a, d
+    cp   28
+    jr   nz, .row_loop
     ret
 
 .export LoadSAT
@@ -163,6 +176,10 @@ LoadSAT:
     ld   a, $D0
     out  ($BE), a
     ret
+
+.export SpriteVariantMap
+SpriteVariantMap:
+    .INCBIN "assets/sprite_variant_map.bin"
 
 ; Helper to copy BC bytes from HL to VDP
 VDP_CopyBytes:

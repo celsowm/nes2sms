@@ -6,6 +6,10 @@ from typing import List
 class HALGenerator:
     """Generates Z80 assembly for the Hardware Abstraction Layer."""
 
+    def __init__(self, split_y: int = 48):
+        # Split point used by the 2-zone sprite-priority policy.
+        self.split_y = max(0, min(239, int(split_y)))
+
     def generate_all(self) -> str:
         """Generate the complete HAL library."""
         sections = [
@@ -207,13 +211,13 @@ _ppu_2007: ; PPUDATA
     ld   b, a
     ld   a, (_ppu_write_mode)
     cp   $02
-    jr   z, _ppu_2007_palette
+    jp   z, _ppu_2007_palette
     cp   $03
-    jr   z, _ppu_2007_attribute
+    jp   z, _ppu_2007_attribute
     cp   $04
-    jr   z, _ppu_2007_chr
+    jp   z, _ppu_2007_chr
     cp   $01
-    jr   z, _ppu_2007_nametable
+    jp   z, _ppu_2007_nametable
     ; Unsupported mode: ignore
     call _ppu_advance_vram_addr
     pop  hl
@@ -693,7 +697,7 @@ _input_latch_p2: .db $00
 """
 
     def generate_oam_dma_routine(self) -> str:
-        return """
+        return f"""
 .export hal_oam_dma
 
 hal_oam_dma:
@@ -707,6 +711,9 @@ hal_oam_dma:
     add  a, $C0       ; Relocate NES page to SMS RAM
     ld   h, a
     ld   l, $00       ; HL = source page in SMS RAM
+    xor  a
+    ld   (_oam_prio_top), a
+    ld   (_oam_prio_bottom), a
 
     ; --- First pass: write Y positions to SAT $3F00 ---
     push hl
@@ -735,15 +742,33 @@ _oam_y_loop:
 
     ld   b, 64
 _oam_xt_loop:
-    inc  hl            ; skip Y (offset +0)
-    ld   a, (hl)      ; NES tile index (offset +1)
+    ld   a, (hl)      ; NES Y position (offset +0)
+    ld   c, a
+    inc  hl            ; tile offset +1
+    ld   a, (hl)      ; NES tile index
     ld   d, a
-    inc  hl            ; skip attributes (offset +2)
-    inc  hl
+    inc  hl            ; attributes offset +2
+    ld   a, (hl)
+    ld   e, a
+    bit  5, e
+    jr   z, _oam_prio_done
+    ld   a, c
+    cp   {self.split_y}
+    jr   c, _oam_prio_mark_top
+    ld   a, $01
+    ld   (_oam_prio_bottom), a
+    jr   _oam_prio_done
+_oam_prio_mark_top:
+    ld   a, $01
+    ld   (_oam_prio_top), a
+_oam_prio_done:
+    inc  hl            ; X offset +3
     ld   a, (hl)      ; NES X position (offset +3)
     out  ($BE), a      ; write X
-    ld   a, d
+    push hl
+    call _oam_map_variant_tile
     out  ($BE), a      ; write tile
+    pop  hl
     inc  hl            ; advance to next sprite
     djnz _oam_xt_loop
 
@@ -751,6 +776,49 @@ _oam_xt_loop:
     pop  de
     pop  bc
     ret
+
+_oam_map_variant_tile:
+    ; D = base tile, E = NES attributes
+    ; combo nibble: [V][H][P1][P0]
+    ld   a, e
+    and  $03
+    ld   c, a
+    bit  6, e
+    jr   z, _oam_combo_h_done
+    set  2, c
+_oam_combo_h_done:
+    bit  7, e
+    jr   z, _oam_combo_ready
+    set  3, c
+_oam_combo_ready:
+    ; HL = (D * 16) + C
+    ld   a, d
+    and  $0F
+    add  a, a
+    add  a, a
+    add  a, a
+    add  a, a
+    ld   l, a
+    ld   a, d
+    and  $F0
+    rrca
+    rrca
+    rrca
+    rrca
+    ld   h, a
+    ld   a, l
+    add  a, c
+    ld   l, a
+    jr   nc, _oam_lookup_ready
+    inc  h
+_oam_lookup_ready:
+    ld   de, SpriteVariantMap
+    add  hl, de
+    ld   a, (hl)
+    ret
+
+_oam_prio_top:    .db $00
+_oam_prio_bottom: .db $00
 """
 
     def generate_utility_routines(self) -> str:

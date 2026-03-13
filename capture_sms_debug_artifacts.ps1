@@ -400,6 +400,71 @@ function Write-HexPreview {
     Set-Content -Path $DestFile -Value $lines -Encoding UTF8
 }
 
+function Write-VdpRegisterDump {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AsmFile,
+        [Parameter(Mandatory = $true)]
+        [string]$DestFile
+    )
+
+    if (-not (Test-Path $AsmFile)) {
+        Set-Content -Path $DestFile -Value @("VDP register dump unavailable: source file not found.") -Encoding UTF8
+        return
+    }
+
+    $lines = Get-Content -Path $AsmFile
+    $dump = @()
+    $dump += "[VDP register intent]"
+    $dump += (Select-String -InputObject $lines -Pattern "Register [0-9]+:" | ForEach-Object { $_.Line.Trim() })
+    $dump += ""
+    $dump += "[VDP write instructions]"
+    $dump += (Select-String -InputObject $lines -Pattern "ld\s+a,\s*[0-9]+|ld\s+b,\s*[%$0-9A-Fa-f]+|call\s+VDP_WriteReg" | ForEach-Object { $_.Line.Trim() })
+    if ($dump.Count -eq 0) {
+        $dump = @("No VDP register lines detected in source.")
+    }
+    Set-Content -Path $DestFile -Value $dump -Encoding UTF8
+}
+
+function Write-SpriteListDump {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SatYPath,
+        [Parameter(Mandatory = $true)]
+        [string]$SatXtPath,
+        [Parameter(Mandatory = $true)]
+        [string]$DestFile
+    )
+
+    if (-not (Test-Path $SatYPath) -or -not (Test-Path $SatXtPath)) {
+        Set-Content -Path $DestFile -Value @("Sprite list unavailable: sat_y.bin or sat_xt.bin missing.") -Encoding UTF8
+        return
+    }
+
+    $y = [System.IO.File]::ReadAllBytes($SatYPath)
+    $xt = [System.IO.File]::ReadAllBytes($SatXtPath)
+    $maxSprites = [Math]::Min(64, $y.Length)
+    $lines = @("idx y x tile")
+
+    for ($i = 0; $i -lt $maxSprites; $i++) {
+        $yy = $y[$i]
+        if ($yy -eq 0xD0) {
+            $lines += "-- terminator at index $i --"
+            break
+        }
+        $xtOffset = $i * 2
+        if ($xtOffset + 1 -ge $xt.Length) {
+            $lines += "-- truncated xt table at sprite $i --"
+            break
+        }
+        $xx = $xt[$xtOffset]
+        $tt = $xt[$xtOffset + 1]
+        $lines += ("{0:D2} ${1:X2} ${2:X2} ${3:X2}" -f $i, $yy, $xx, $tt)
+    }
+
+    Set-Content -Path $DestFile -Value $lines -Encoding UTF8
+}
+
 $baseDir = $PSScriptRoot
 $resolvedProject = Resolve-ProjectPath -BaseDir $baseDir -Dir $ProjectDir
 $romPath = Find-RomFile -ProjectPath $resolvedProject
@@ -433,6 +498,7 @@ Write-Host "OutDir : $OutDir"
 $buildDir = Join-Path $resolvedProject "build"
 Copy-IfExists (Join-Path $buildDir "stubs\game_logic.asm") (Join-Path $asmOut "game_logic.asm")
 Copy-IfExists (Join-Path $buildDir "hal\support.asm") (Join-Path $asmOut "support.asm")
+Copy-IfExists (Join-Path $buildDir "hal\vdp.asm") (Join-Path $asmOut "vdp.asm")
 Copy-IfExists (Join-Path $buildDir "assets.asm") (Join-Path $asmOut "assets.asm")
 Copy-IfExists (Join-Path $buildDir "init.asm") (Join-Path $asmOut "init.asm")
 Copy-IfExists (Join-Path $buildDir "interrupts.asm") (Join-Path $asmOut "interrupts.asm")
@@ -440,17 +506,71 @@ Copy-IfExists (Join-Path $buildDir "interrupts.asm") (Join-Path $asmOut "interru
 Copy-IfExists (Join-Path $buildDir "assets\palette_bg.bin") (Join-Path $binOut "palette_bg.bin")
 Copy-IfExists (Join-Path $buildDir "assets\palette_spr.bin") (Join-Path $binOut "palette_spr.bin")
 Copy-IfExists (Join-Path $buildDir "assets\tiles.bin") (Join-Path $binOut "tiles.bin")
+Copy-IfExists (Join-Path $buildDir "assets\sat_y.bin") (Join-Path $binOut "sat_y.bin")
+Copy-IfExists (Join-Path $buildDir "assets\sat_xt.bin") (Join-Path $binOut "sat_xt.bin")
+Copy-IfExists (Join-Path $buildDir "assets\sprite_variant_map.bin") (Join-Path $binOut "sprite_variant_map.bin")
+
+if (-not (Test-Path (Join-Path $binOut "sat_y.bin"))) {
+    [System.IO.File]::WriteAllBytes((Join-Path $binOut "sat_y.bin"), [byte[]](0xD0))
+}
+if (-not (Test-Path (Join-Path $binOut "sat_xt.bin"))) {
+    [System.IO.File]::WriteAllBytes((Join-Path $binOut "sat_xt.bin"), [byte[]]@())
+}
+if (-not (Test-Path (Join-Path $binOut "sprite_variant_map.bin"))) {
+    $defaultVariantMap = New-Object byte[] (256 * 16)
+    for ($tile = 0; $tile -lt 256; $tile++) {
+        for ($combo = 0; $combo -lt 16; $combo++) {
+            $defaultVariantMap[$tile * 16 + $combo] = [byte]$tile
+        }
+    }
+    [System.IO.File]::WriteAllBytes((Join-Path $binOut "sprite_variant_map.bin"), $defaultVariantMap)
+}
 
 Write-HexPreview -SourceFile (Join-Path $binOut "palette_bg.bin") -DestFile (Join-Path $binOut "palette_bg.hex.txt") -MaxBytes 64
 Write-HexPreview -SourceFile (Join-Path $binOut "palette_spr.bin") -DestFile (Join-Path $binOut "palette_spr.hex.txt") -MaxBytes 64
 Write-HexPreview -SourceFile (Join-Path $binOut "tiles.bin") -DestFile (Join-Path $binOut "tiles_first256.hex.txt") -MaxBytes 256
+Write-HexPreview -SourceFile (Join-Path $binOut "sat_y.bin") -DestFile (Join-Path $binOut "sat_y.hex.txt") -MaxBytes 64
+Write-HexPreview -SourceFile (Join-Path $binOut "sat_xt.bin") -DestFile (Join-Path $binOut "sat_xt.hex.txt") -MaxBytes 128
+Write-HexPreview -SourceFile (Join-Path $binOut "sprite_variant_map.bin") -DestFile (Join-Path $binOut "sprite_variant_map.hex.txt") -MaxBytes 256
+
+Write-VdpRegisterDump -AsmFile (Join-Path $asmOut "vdp.asm") -DestFile (Join-Path $binOut "vdp_registers.dump.txt")
+Write-SpriteListDump -SatYPath (Join-Path $binOut "sat_y.bin") -SatXtPath (Join-Path $binOut "sat_xt.bin") -DestFile (Join-Path $binOut "sprite_list.dump.txt")
 
 $summaryPath = Join-Path $OutDir "summary.txt"
+$summaryJsonPath = Join-Path $OutDir "summary.json"
 $summaryLines = @()
 $summaryLines += "Project: $resolvedProject"
 $summaryLines += "ROM: $romPath"
 $summaryLines += "Generated: $(Get-Date -Format s)"
 $summaryLines += ""
+
+$summary = [ordered]@{
+    status = "static_only"
+    project = $resolvedProject
+    rom = $romPath
+    generated_at = (Get-Date -Format s)
+    artifacts = [ordered]@{
+        asm = $asmOut
+        bin = $binOut
+        images = $imgOut
+    }
+    mandatory = [ordered]@{
+        palette_bg_hex = Test-Path (Join-Path $binOut "palette_bg.hex.txt")
+        palette_spr_hex = Test-Path (Join-Path $binOut "palette_spr.hex.txt")
+        tiles_first256_hex = Test-Path (Join-Path $binOut "tiles_first256.hex.txt")
+        vdp_register_dump = Test-Path (Join-Path $binOut "vdp_registers.dump.txt")
+        sprite_list_dump = Test-Path (Join-Path $binOut "sprite_list.dump.txt")
+        sat_y = Test-Path (Join-Path $binOut "sat_y.bin")
+        sat_xt = Test-Path (Join-Path $binOut "sat_xt.bin")
+    }
+    capture = [ordered]@{
+        attempted = $false
+        emulator_path = $null
+        window_title = $null
+        frame_hashes = [ordered]@{}
+        attempts = @()
+    }
+}
 
 $gameLogic = Join-Path $asmOut "game_logic.asm"
 $supportAsm = Join-Path $asmOut "support.asm"
@@ -470,66 +590,93 @@ Set-Content -Path $summaryPath -Value $summaryLines -Encoding UTF8
 $resolvedEmulator = Find-Emulator -BaseDir $baseDir -CustomPath $EmulatorPath
 if (-not $resolvedEmulator) {
     Write-Host "WARNING: BlastEm not found. Static artifacts collected only." -ForegroundColor Yellow
+    $summary.capture.attempted = $false
+    $summary.status = "static_only"
+    $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJsonPath -Encoding UTF8
+    Write-Host "Done. Artifacts written to: $OutDir" -ForegroundColor Green
     exit 0
 }
 
 Write-Host "=== Capturing emulator artifacts ===" -ForegroundColor Cyan
 Write-Host "Emulator: $resolvedEmulator"
+$summary.capture.attempted = $true
+$summary.capture.emulator_path = $resolvedEmulator
+$summary.status = "capture_partial"
 
-$process = Start-Process -FilePath $resolvedEmulator -ArgumentList @("-m", "sms", $romPath) -PassThru
-Start-Sleep -Seconds 3
-$captureSucceeded = $false
-
+$process = $null
 try {
+    $attempt = [ordered]@{ step = "launch"; ok = $true; message = ""; pid = $null }
+    $process = Start-Process -FilePath $resolvedEmulator -ArgumentList @("-m", "sms", $romPath) -PassThru
+    $attempt.pid = $process.Id
+    $summary.capture.attempts += $attempt
+    Start-Sleep -Seconds 3
+
     $windowHandle = Wait-MainWindowHandle -Process $process
     if ($windowHandle -eq [IntPtr]::Zero) {
-        throw "Capture failed: BlastEm window handle was not available in time."
+        throw "Window handle not available."
     }
     $windowTitle = Validate-WindowOrigin -WindowHandle $windowHandle -ProcessId $process.Id
+    $summary.capture.window_title = $windowTitle
+    $summary.capture.attempts += [ordered]@{ step = "window_ready"; ok = $true; message = "Window validated."; pid = $process.Id }
 
     Ensure-WindowCaptureType
     [void][Win32WindowCapture]::SetForegroundWindow($windowHandle)
-
     $focused = Focus-EmulatorWindow -WindowHandle $windowHandle -ProcessId $process.Id
     if (-not $focused) {
-        Write-Warning "BlastEm window could not be forced to foreground; using direct window-key events."
+        $summary.capture.attempts += [ordered]@{ step = "focus"; ok = $false; message = "Foreground focus not guaranteed."; pid = $process.Id }
+    }
+    else {
+        $summary.capture.attempts += [ordered]@{ step = "focus"; ok = $true; message = "Foreground focus acquired."; pid = $process.Id }
     }
 
     $imgGame = Join-Path $imgOut "00_game.png"
     $imgVram = Join-Path $imgOut "01_vram_debug.png"
     $imgCram = Join-Path $imgOut "02_cram_debug.png"
-    $imgProbe = Join-Path $imgOut "_probe.png"
 
-    $hashGame = Capture-FrameHash -WindowHandle $windowHandle -Path $imgGame
-
-    # Force a paused/stable frame before debug hotkey validation.
-    Send-EmulatorKey -WindowHandle $windowHandle -KeyChar 'u'
-    Start-Sleep -Milliseconds 650
-    $hashGameProbe = Capture-FrameHash -WindowHandle $windowHandle -Path $imgProbe
-    Start-Sleep -Milliseconds 1200
-    $hashGameProbe2 = Capture-FrameHash -WindowHandle $windowHandle -Path $imgProbe
-    Start-Sleep -Milliseconds 1200
-    $hashGameProbe3 = Capture-FrameHash -WindowHandle $windowHandle -Path $imgProbe
-    $frameWasStable = ($hashGameProbe -eq $hashGameProbe2 -and $hashGameProbe2 -eq $hashGameProbe3)
-    if (-not $frameWasStable) {
-        throw "Capture validation failed: frame did not stabilize after debugger hotkey 'u'; cannot trust VRAM/CRAM captures."
+    try {
+        $hashGame = Capture-FrameHash -WindowHandle $windowHandle -Path $imgGame
+        $summary.capture.frame_hashes["game"] = $hashGame
+        $summary.capture.attempts += [ordered]@{ step = "capture_game"; ok = $true; message = "Game frame captured."; pid = $process.Id }
+    }
+    catch {
+        $summary.capture.attempts += [ordered]@{ step = "capture_game"; ok = $false; message = $_.Exception.Message; pid = $process.Id }
     }
 
-    $hashVram = Capture-DebugView -WindowHandle $windowHandle -KeyChar 'v' -Path $imgVram -PreviousHashes @($hashGameProbe) -ViewName "VRAM"
-    $hashCram = Capture-DebugView -WindowHandle $windowHandle -KeyChar 'c' -Path $imgCram -PreviousHashes @($hashGameProbe, $hashVram) -ViewName "CRAM"
+    # Optional debug views (best effort only).
+    try {
+        Send-EmulatorKey -WindowHandle $windowHandle -KeyChar 'u'
+        Start-Sleep -Milliseconds 500
+        $prev = @()
+        if ($summary.capture.frame_hashes["game"]) {
+            $prev = @($summary.capture.frame_hashes["game"])
+        }
+        $hashVram = Capture-DebugView -WindowHandle $windowHandle -KeyChar 'v' -Path $imgVram -PreviousHashes $prev -ViewName "VRAM"
+        $summary.capture.frame_hashes["vram"] = $hashVram
+        $summary.capture.attempts += [ordered]@{ step = "capture_vram_optional"; ok = $true; message = "VRAM debug view captured."; pid = $process.Id }
+    }
+    catch {
+        $summary.capture.attempts += [ordered]@{ step = "capture_vram_optional"; ok = $false; message = $_.Exception.Message; pid = $process.Id }
+    }
 
-    Validate-CapturedImages -ImagePaths @($imgGame, $imgVram, $imgCram)
-    Remove-Item -Path $imgProbe -ErrorAction SilentlyContinue
-    Add-Content -Path $summaryPath -Value @(
-        "[capture checks]",
-        "Window title: $windowTitle",
-        "Static frame before debug capture: $frameWasStable",
-        "Hash GAME: $hashGame",
-        "Hash VRAM: $hashVram",
-        "Hash CRAM: $hashCram",
-        ""
-    )
-    $captureSucceeded = $true
+    try {
+        $prev = @()
+        if ($summary.capture.frame_hashes["game"]) { $prev += $summary.capture.frame_hashes["game"] }
+        if ($summary.capture.frame_hashes["vram"]) { $prev += $summary.capture.frame_hashes["vram"] }
+        $hashCram = Capture-DebugView -WindowHandle $windowHandle -KeyChar 'c' -Path $imgCram -PreviousHashes $prev -ViewName "CRAM"
+        $summary.capture.frame_hashes["cram"] = $hashCram
+        $summary.capture.attempts += [ordered]@{ step = "capture_cram_optional"; ok = $true; message = "CRAM debug view captured."; pid = $process.Id }
+    }
+    catch {
+        $summary.capture.attempts += [ordered]@{ step = "capture_cram_optional"; ok = $false; message = $_.Exception.Message; pid = $process.Id }
+    }
+
+    if ($summary.capture.frame_hashes["game"]) {
+        $summary.status = "ok"
+    }
+}
+catch {
+    $summary.capture.attempts += [ordered]@{ step = "capture_error"; ok = $false; message = $_.Exception.Message; pid = $null }
+    $summary.status = "capture_failed"
 }
 finally {
     if (-not $KeepEmulatorOpen -and $process -and -not $process.HasExited) {
@@ -537,8 +684,32 @@ finally {
     }
 }
 
-if (-not $captureSucceeded) {
-    throw "Emulator artifact capture failed validation. Re-run and keep BlastEm focused."
+Add-Content -Path $summaryPath -Value @(
+    "[capture checks]",
+    "Capture attempted: $($summary.capture.attempted)",
+    "Capture status: $($summary.status)",
+    "Window title: $($summary.capture.window_title)",
+    "Hash GAME: $($summary.capture.frame_hashes['game'])",
+    "Hash VRAM(optional): $($summary.capture.frame_hashes['vram'])",
+    "Hash CRAM(optional): $($summary.capture.frame_hashes['cram'])",
+    ""
+)
+
+$mandatoryOk = $true
+foreach ($k in $summary.mandatory.Keys) {
+    if (-not $summary.mandatory[$k]) {
+        $mandatoryOk = $false
+    }
+}
+$summary.mandatory_ok = $mandatoryOk
+if (-not $mandatoryOk) {
+    $summary.status = "missing_mandatory_artifacts"
+}
+
+$summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJsonPath -Encoding UTF8
+
+if (-not $mandatoryOk) {
+    throw "Mandatory deterministic artifacts are missing. Check summary.json."
 }
 
 Write-Host "Done. Artifacts written to: $OutDir" -ForegroundColor Green

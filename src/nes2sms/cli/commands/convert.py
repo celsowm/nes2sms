@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from ...infrastructure.rom_loader import RomLoader
 from ...infrastructure.asset_writer import AssetWriter
@@ -105,6 +105,9 @@ def cmd_convert(args):
     # Step 4: Convert graphics
     print("[4/6] Converting graphics...")
     tile_result = None
+    bg_pal = None
+    spr_pal = None
+    color_maps: List[List[int]] = []
     if loader.chr_data:
         # Try to extract actual palette from PRG code
         nes_palette_ram = None
@@ -131,19 +134,14 @@ def cmd_convert(args):
             result = tile_converter.convert(loader.chr_data, bank_id=0)
         tile_result = result
 
-        writer.write_palette(bg_pal, "bg")
-        writer.write_palette(spr_pal, "spr")
-        writer.write_tiles(result.sms_tiles)
-        writer.write_flip_index(result.flip_index)
-        writer.write_tile_symbols(result.tile_metadata, "assets")
-
         total_size = sum(len(t) for t in result.sms_tiles)
-        print(f"      {len(result.sms_tiles)} tiles | {total_size // 1024}KB")
-        print(f"      Palettes: palette_bg.bin + palette_spr.bin")
+        print(f"      Base tiles: {len(result.sms_tiles)} | {total_size // 1024}KB")
+        print("      Palettes prepared: palette_bg.bin + palette_spr.bin")
     print()
 
     # Step 4b: Extract OAM/sprite data
     oam_sprites = None
+    sprite_variant_lookup: Dict[Tuple[int, int], int] = {}
     if loader.prg_data and loader.chr_data:
         chr_tile_count = len(loader.chr_data) // 16
         oam_extractor = OamExtractor(loader.prg_data, chr_tile_count)
@@ -165,14 +163,68 @@ def cmd_convert(args):
 
         if oam_sprites:
             print(f"[4b] Extracted {len(oam_sprites)} sprites from OAM data")
-            y_table, xt_table = oam_extractor.to_sms_sat(oam_sprites)
-            writer.write_binary("sat_y.bin", y_table, "assets")
-            writer.write_binary("sat_xt.bin", xt_table, "assets")
             if tile_result is not None:
                 tile_activity = OamExtractor.build_tile_activity(tile_result.sms_tiles)
                 ratio = OamExtractor.nonempty_tile_ratio(oam_sprites, tile_activity)
                 print(f"      OAM confidence: {ratio:.0%} referenced tiles are non-empty")
             print()
+
+    if tile_result is not None and loader.chr_data:
+        sprite_variant_map = _build_default_sprite_variant_map()
+        sprite_variant_profile = {
+            "split_y": int(getattr(args, "split_y", 48)),
+            "entries": [],
+            "resolved_variants": [],
+            "warnings": [],
+        }
+        if oam_sprites:
+            variant_result = _apply_profiled_sprite_variants(
+                chr_data=loader.chr_data,
+                tile_result=tile_result,
+                oam_sprites=oam_sprites,
+                color_maps=color_maps,
+                split_y=int(getattr(args, "split_y", 48)),
+            )
+            sprite_variant_lookup = variant_result["lookup"]
+            sprite_variant_map = variant_result["variant_map"]
+            sprite_variant_profile = variant_result["profile"]
+            for warning in variant_result["warnings"]:
+                print(f"[4c] WARNING: {warning}")
+
+        writer.write_palette(bg_pal, "bg")
+        writer.write_palette(spr_pal, "spr")
+        writer.write_tiles(tile_result.sms_tiles)
+        writer.write_flip_index(tile_result.flip_index)
+        writer.write_tile_symbols(tile_result.tile_metadata, "assets")
+        writer.write_binary("sprite_variant_map.bin", sprite_variant_map, "assets")
+        writer.write_json("sprite_variant_profile.json", sprite_variant_profile, "assets")
+
+        total_size = sum(len(t) for t in tile_result.sms_tiles)
+        print(f"[4c] Final tiles: {len(tile_result.sms_tiles)} | {total_size // 1024}KB")
+        print("[4c] Wrote sprite_variant_map.bin + sprite_variant_profile.json")
+        print()
+    else:
+        writer.write_binary("sprite_variant_map.bin", _build_default_sprite_variant_map(), "assets")
+        writer.write_json(
+            "sprite_variant_profile.json",
+            {
+                "split_y": int(getattr(args, "split_y", 48)),
+                "entries": [],
+                "resolved_variants": [],
+                "priority": {"top": 0, "bottom": 0},
+                "warnings": ["No CHR data available; using default sprite variant map."],
+            },
+            "assets",
+        )
+
+    if oam_sprites:
+        y_table, xt_table = oam_extractor.to_sms_sat(
+            oam_sprites,
+            variant_lookup=sprite_variant_lookup,
+            y_offset=1,
+        )
+        writer.write_binary("sat_y.bin", y_table, "assets")
+        writer.write_binary("sat_xt.bin", xt_table, "assets")
 
     # Step 5: Generate Z80 stubs with translation
     print("[5/6] Generating Z80 stubs with translation...")
@@ -239,7 +291,16 @@ def cmd_convert(args):
     print("[5b/6] Generating WLA-DX project...")
     from ...core.nes.mapper import get_mapper_strategy
     mapper_strategy = get_mapper_strategy(loader.header.mapper)
-    _generate_wla_project(out_dir, bank_map, loader, mapper_strategy, translator.instruction_translator, oam_sprites=oam_sprites)
+    use_static_sat = bool(oam_sprites) and getattr(args, "sat_source", "runtime") == "static-fallback"
+    _generate_wla_project(
+        out_dir,
+        bank_map,
+        loader,
+        mapper_strategy,
+        translator.instruction_translator,
+        oam_sprites=oam_sprites if use_static_sat else None,
+        split_y=int(getattr(args, "split_y", 48)),
+    )
     print()
 
     # Step 6: Build (optional or required for --run)
@@ -313,6 +374,190 @@ def _extract_chr_banks(chr_data: bytes, banks_config: dict):
             chr_banks.append((i, bank_data))
 
     return chr_banks
+
+
+def _build_default_sprite_variant_map() -> bytes:
+    """Build a default tile/attr map where each combo resolves to the base tile."""
+    table = bytearray(256 * 16)
+    for tile in range(256):
+        base = tile * 16
+        for combo in range(16):
+            table[base + combo] = tile
+    return bytes(table)
+
+
+def _find_tile_index_within(tiles: List[bytes], candidate: bytes, max_index: int) -> Optional[int]:
+    limit = min(max_index + 1, len(tiles))
+    for idx in range(limit):
+        if tiles[idx] == candidate:
+            return idx
+    return None
+
+
+def _allocate_variant_slot(free_slots: List[int], tiles: List[bytes], max_index: int) -> Optional[int]:
+    if free_slots:
+        return free_slots.pop(0)
+    if len(tiles) <= max_index:
+        tiles.append(bytes(32))
+        return len(tiles) - 1
+    return None
+
+
+def _apply_profiled_sprite_variants(
+    chr_data: bytes,
+    tile_result,
+    oam_sprites: List[Dict],
+    color_maps: List[List[int]],
+    split_y: int = 48,
+) -> Dict[str, object]:
+    """
+    Materialize profiled sprite variants and build runtime tile/attr lookup map.
+
+    Variant generation is bounded to sprite-addressable tile indices (0-255).
+    Unresolved combinations safely fall back to the base tile index.
+    """
+    warnings: List[str] = []
+    tiles = tile_result.sms_tiles
+    metadata = tile_result.tile_metadata
+    flip_index = tile_result.flip_index
+    max_sprite_tile = min(255, len(tiles) - 1)
+
+    if max_sprite_tile < 0:
+        return {
+            "lookup": {},
+            "variant_map": _build_default_sprite_variant_map(),
+            "profile": {
+                "split_y": split_y,
+                "entries": [],
+                "resolved_variants": [],
+                "priority": {"top": 0, "bottom": 0},
+                "warnings": ["No base tiles available for sprite variant mapping."],
+            },
+            "warnings": ["No base tiles available for sprite variant mapping."],
+        }
+
+    # Use extracted sprite palettes (maps 4..7). Fallback to first map if unavailable.
+    if len(color_maps) >= 8:
+        sprite_maps = color_maps[4:8]
+    elif len(color_maps) >= 4:
+        sprite_maps = color_maps[:4]
+    elif color_maps:
+        sprite_maps = [color_maps[0], color_maps[0], color_maps[0], color_maps[0]]
+    else:
+        sprite_maps = [[0, 1, 2, 3]] * 4
+
+    sprite_converter = TileConverter(color_maps=[sprite_maps[0]], flip_strategy="none")
+    variant_lookup: Dict[Tuple[int, int], int] = {}
+    observed_tiles = {
+        int(spr.get("tile", 0)) & 0xFF
+        for spr in oam_sprites
+        if isinstance(spr.get("tile"), int) and 0 <= int(spr.get("tile", 0)) <= max_sprite_tile
+    }
+    free_slots = [
+        idx for idx in range(max_sprite_tile + 1) if idx not in observed_tiles and not any(tiles[idx])
+    ]
+
+    profile_entries = OamExtractor.build_variant_profile(oam_sprites)
+    resolved_variants = []
+
+    for entry in profile_entries:
+        tile = int(entry["tile"]) & 0xFF
+        attr = int(entry["attr"]) & 0xFF
+        combo = int(entry["combo"]) & 0x0F
+        count = int(entry["count"])
+
+        if tile > max_sprite_tile:
+            warnings.append(
+                f"Variant profile tile {tile} exceeds sprite index range 0-{max_sprite_tile}; fallback to base tile."
+            )
+            variant_lookup[(tile, combo)] = tile & 0xFF
+            continue
+
+        src_off = tile * 16
+        if src_off + 16 > len(chr_data):
+            warnings.append(f"Variant source tile {tile} is out of CHR bounds; fallback to base tile.")
+            variant_lookup[(tile, combo)] = tile
+            continue
+
+        palette_idx = combo & 0x03
+        tile_16 = chr_data[src_off : src_off + 16]
+        variant_tile = sprite_converter.convert_tile_with_map(tile_16, sprite_maps[palette_idx])
+        if combo & 0x04:
+            variant_tile = TileConverter._flip_tile_h(variant_tile)
+        if combo & 0x08:
+            variant_tile = TileConverter._flip_tile_v(variant_tile)
+
+        existing_idx = _find_tile_index_within(tiles, variant_tile, max_sprite_tile)
+        if existing_idx is not None:
+            mapped_idx = existing_idx
+        else:
+            slot = _allocate_variant_slot(free_slots, tiles, max_sprite_tile)
+            if slot is None:
+                warnings.append(
+                    f"No sprite tile slots left for tile={tile} attr=${attr:02X} combo={combo}; fallback to base tile."
+                )
+                mapped_idx = tile
+            else:
+                tiles[slot] = variant_tile
+                if slot < len(metadata):
+                    metadata[slot] = {
+                        "bank": metadata[slot].get("bank", 0),
+                        "tile_index": tile,
+                        "variant_combo": combo,
+                        "variant_attr": attr,
+                    }
+                else:
+                    metadata.append(
+                        {
+                            "bank": 0,
+                            "tile_index": tile,
+                            "variant_combo": combo,
+                            "variant_attr": attr,
+                        }
+                    )
+                mapped_idx = slot
+
+        variant_lookup[(tile, combo)] = mapped_idx
+        flip_index[f"{tile}_A{attr:02X}"] = mapped_idx
+        resolved_variants.append(
+            {
+                "tile": tile,
+                "attr": attr,
+                "combo": combo,
+                "count": count,
+                "mapped_tile": mapped_idx,
+            }
+        )
+
+    variant_map = bytearray(_build_default_sprite_variant_map())
+    for (tile, combo), mapped in variant_lookup.items():
+        if 0 <= tile < 256 and 0 <= combo < 16:
+            variant_map[tile * 16 + combo] = mapped & 0xFF
+
+    priority_top = sum(
+        1
+        for spr in oam_sprites
+        if (int(spr.get("attr", 0)) & 0x20) and int(spr.get("y", 0)) < split_y
+    )
+    priority_bottom = sum(
+        1
+        for spr in oam_sprites
+        if (int(spr.get("attr", 0)) & 0x20) and int(spr.get("y", 0)) >= split_y
+    )
+
+    profile = {
+        "split_y": split_y,
+        "entries": profile_entries,
+        "resolved_variants": resolved_variants,
+        "priority": {"top": priority_top, "bottom": priority_bottom},
+        "warnings": warnings,
+    }
+    return {
+        "lookup": variant_lookup,
+        "variant_map": bytes(variant_map),
+        "profile": profile,
+        "warnings": warnings,
+    }
 
 
 def _build_rom(out_dir: Path) -> bool:
@@ -403,19 +648,10 @@ def _build_rom(out_dir: Path) -> bool:
         return False
 
 
-def _generate_assets_with_oam(oam_sprites: list, blank_tile_index: int = 0) -> str:
+def _generate_assets_with_oam(blank_tile_index: int = 0, split_tile: int = 6) -> str:
     """
-    Generate assets.asm with proper SAT loading from extracted NES OAM data.
-
-    Args:
-        oam_sprites: List of dicts with y, tile, attr, x keys
+    Generate assets.asm with SAT loading from prebuilt sat_y/sat_xt binaries.
     """
-    # Build Y table bytes
-    y_bytes = ", ".join(f"${s['y']:02X}" for s in oam_sprites)
-    # Build X/tile pairs
-    xt_bytes = ", ".join(f"${s['x']:02X},${s['tile']:02X}" for s in oam_sprites)
-    num_sprites = len(oam_sprites)
-
     return f"""
 .export LoadPalettes
 LoadPalettes:
@@ -439,25 +675,37 @@ LoadTiles:
     ld   hl, $0000
     call VDP_SetWriteAddress
     ld   hl, Tiles
-    ld   bc, $2000
+    ld   bc, Tiles_End - Tiles
     call VDP_CopyBytes
     ret
 
 .export LoadTilemap
 LoadTilemap:
-    ; Clear name table with a conservative blank tile index.
+    ; Clear name table and apply coarse priority zoning.
     ld   hl, $3800
     call VDP_SetWriteAddress
-    ld   bc, $0380 ; 32x28 entries
-.tilemap_loop:
+    ld   d, 0
+.row_loop:
+    ld   e, 32
+    ld   a, d
+    cp   {split_tile}
+    jr   c, .row_no_prio
+    ld   c, $10
+    jr   .row_prio_ready
+.row_no_prio:
+    ld   c, $00
+.row_prio_ready:
+.col_loop:
     ld   a, {blank_tile_index}
     out  ($BE), a
-    xor  a
+    ld   a, c
     out  ($BE), a
-    dec  bc
-    ld   a, b
-    or   c
-    jr   nz, .tilemap_loop
+    dec  e
+    jr   nz, .col_loop
+    inc  d
+    ld   a, d
+    cp   28
+    jr   nz, .row_loop
     ret
 
 .export LoadSAT
@@ -466,22 +714,28 @@ LoadSAT:
     ld   hl, $3F00
     call VDP_SetWriteAddress
     ld   hl, _SpriteY
-    ld   bc, {num_sprites + 1}
+    ld   bc, _SpriteY_End - _SpriteY
     call VDP_CopyBytes
 
     ; Load sprite X/tile pairs
     ld   hl, $3F80
     call VDP_SetWriteAddress
     ld   hl, _SpriteXT
-    ld   bc, {num_sprites * 2}
+    ld   bc, _SpriteXT_End - _SpriteXT
     call VDP_CopyBytes
     ret
 
 _SpriteY:
-    .db {y_bytes}, $D0
+    .INCBIN "assets/sat_y.bin"
+_SpriteY_End:
 
 _SpriteXT:
-    .db {xt_bytes}
+    .INCBIN "assets/sat_xt.bin"
+_SpriteXT_End:
+
+.export SpriteVariantMap
+SpriteVariantMap:
+    .INCBIN "assets/sprite_variant_map.bin"
 
 ; Helper to copy BC bytes from HL to VDP
 VDP_CopyBytes:
@@ -496,7 +750,15 @@ VDP_CopyBytes:
 """
 
 
-def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy=None, translator=None, oam_sprites=None):
+def _generate_wla_project(
+    out_dir: Path,
+    bank_map: dict,
+    loader,
+    mapper_strategy=None,
+    translator=None,
+    oam_sprites=None,
+    split_y: int = 48,
+):
     """
     Generate WLA-DX project structure.
 
@@ -506,7 +768,8 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy
         loader: RomLoader instance with header info
         mapper_strategy: NES mapper strategy
         translator: InstructionTranslator instance
-        oam_sprites: Extracted NES OAM sprite data (list of dicts with y, tile, attr, x)
+        oam_sprites: Extracted NES OAM sprite data (used only for static SAT fallback mode)
+        split_y: Sprite priority split in pixels for two-zone tilemap attributes
     """
     from ...infrastructure.wla_dx.templates import (
         MAIN_ASM,
@@ -545,11 +808,12 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy
     (build_dir / "init.asm").write_text(INIT_ASM, encoding="utf-8")
     (build_dir / "interrupts.asm").write_text(INTERRUPTS_ASM, encoding="utf-8")
 
-    # Generate assets.asm - use dynamic SAT if OAM sprites were extracted
+    split_tile = max(0, min(27, split_y // 8))
+    # Generate assets.asm - use SAT binary fallback when requested
     if oam_sprites:
-        assets_content = _generate_assets_with_oam(oam_sprites)
+        assets_content = _generate_assets_with_oam(split_tile=split_tile)
     else:
-        assets_content = ASSETS_ASM
+        assets_content = ASSETS_ASM.replace("PRIORITY_SPLIT_TILE", str(split_tile))
     (build_dir / "assets.asm").write_text(assets_content, encoding="utf-8")
 
     # HAL files
@@ -560,7 +824,7 @@ def _generate_wla_project(out_dir: Path, bank_map: dict, loader, mapper_strategy
 
     # Write dynamic support code if available
     if translator and mapper_strategy:
-        support_code = translator.get_support_code(mapper_strategy)
+        support_code = translator.get_support_code(mapper_strategy, split_y=split_y)
         (build_dir / "hal" / "support.asm").write_text(support_code, encoding="utf-8")
         
 

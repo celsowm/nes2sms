@@ -82,6 +82,45 @@ class OamExtractor:
         return True
 
     @staticmethod
+    def sprite_combo(attr: int) -> int:
+        """
+        Build sprite variant combo nibble from NES OAM attributes.
+
+        Combo layout:
+        - bits 0-1: NES sprite palette (0-3)
+        - bit 2: H flip
+        - bit 3: V flip
+        """
+        combo = attr & 0x03
+        if attr & 0x40:
+            combo |= 0x04
+        if attr & 0x80:
+            combo |= 0x08
+        return combo
+
+    @classmethod
+    def build_variant_profile(cls, sprites: List[Dict]) -> List[Dict]:
+        """Build profile entries for observed (tile, attr) combinations."""
+        counts: Dict[Tuple[int, int], int] = {}
+        for spr in sprites or []:
+            tile = int(spr.get("tile", 0)) & 0xFF
+            attr = int(spr.get("attr", 0)) & 0xFF
+            key = (tile, attr)
+            counts[key] = counts.get(key, 0) + 1
+
+        profile = []
+        for (tile, attr), count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+            profile.append(
+                {
+                    "tile": tile,
+                    "attr": attr,
+                    "combo": cls.sprite_combo(attr),
+                    "count": count,
+                }
+            )
+        return profile
+
+    @staticmethod
     def build_tile_activity(tiles: List[bytes]) -> List[bool]:
         """Build a per-tile visibility mask from converted tile data."""
         return [any(tile) for tile in tiles]
@@ -133,7 +172,12 @@ class OamExtractor:
             return False
         return True
 
-    def to_sms_sat(self, sprites: List[Dict]) -> Tuple[bytes, bytes]:
+    def to_sms_sat(
+        self,
+        sprites: List[Dict],
+        variant_lookup: Optional[Dict[Tuple[int, int], int]] = None,
+        y_offset: int = 1,
+    ) -> Tuple[bytes, bytes]:
         """
         Convert NES OAM entries to SMS SAT format.
 
@@ -146,11 +190,19 @@ class OamExtractor:
         xt_table = bytearray()
 
         for spr in sprites:
-            # NES Y is offset by 1 (Y=0 means scanline 1)
-            # SMS sprites also have a similar offset
-            y_table.append(spr["y"])
-            xt_table.append(spr["x"])
-            xt_table.append(spr["tile"])
+            raw_y = int(spr.get("y", 0)) & 0xFF
+            raw_x = int(spr.get("x", 0)) & 0xFF
+            raw_tile = int(spr.get("tile", 0)) & 0xFF
+            raw_attr = int(spr.get("attr", 0)) & 0xFF
+
+            combo = self.sprite_combo(raw_attr)
+            mapped_tile = raw_tile
+            if variant_lookup:
+                mapped_tile = variant_lookup.get((raw_tile, combo), raw_tile) & 0xFF
+
+            y_table.append((raw_y + y_offset) & 0xFF)
+            xt_table.append(raw_x)
+            xt_table.append(mapped_tile)
 
         # Add terminator
         y_table.append(0xD0)

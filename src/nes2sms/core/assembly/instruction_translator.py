@@ -265,17 +265,18 @@ class InstructionTranslator:
         """Check if an instruction is supported."""
         return mnemonic.upper() in self.strategies
 
-    def get_support_code(self, mapper_strategy: MapperStrategy) -> str:
+    def get_support_code(self, mapper_strategy: MapperStrategy, split_y: int = 48) -> str:
         """
         Generate the complete support library (HAL + Mapper).
 
         Args:
             mapper_strategy: The NES mapper strategy being used.
+            split_y: Priority split Y for sprite/background layering policy.
 
         Returns:
             Z80 assembly string with HAL and Mapper routines.
         """
-        hal_gen = HALGenerator()
+        hal_gen = HALGenerator(split_y=split_y)
         hal_code = hal_gen.generate_all()
         
         mapper_code = "\n".join(mapper_strategy.generate_banking_code())

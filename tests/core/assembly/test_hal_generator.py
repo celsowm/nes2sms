@@ -78,7 +78,7 @@ class TestHalGenerator:
         dispatch_block = ppu_code[start_dispatch:end_dispatch]
 
         assert "cp   $04" in dispatch_block
-        assert "jr   z, _ppu_2007_chr" in dispatch_block
+        assert "jp   z, _ppu_2007_chr" in dispatch_block
         assert "_ppu_2007_chr:" in ppu_code
 
     def test_oam_dma_applies_nes_to_sms_y_adjustment(self):
@@ -90,3 +90,14 @@ class TestHalGenerator:
         assert "ld   a, (hl)" in block
         assert "inc  a" in block
         assert "out  ($BE), a" in block
+
+    def test_oam_dma_uses_sprite_variant_lookup_table(self):
+        oam_code = HALGenerator().generate_oam_dma_routine()
+
+        assert "_oam_map_variant_tile:" in oam_code
+        assert "ld   de, SpriteVariantMap" in oam_code
+        assert "call _oam_map_variant_tile" in oam_code
+
+    def test_oam_dma_embeds_priority_split_threshold(self):
+        oam_code = HALGenerator(split_y=64).generate_oam_dma_routine()
+        assert "cp   64" in oam_code

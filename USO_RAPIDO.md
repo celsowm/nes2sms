@@ -57,6 +57,8 @@ nes2sms convert --nes game.nes --out output_dir [opções]
 | `--nes` | Path do arquivo .nes (obrigatório) |
 | `--out` | Diretório de saída (obrigatório) |
 | `--flip-strategy` | Estratégia de flip: `cache` (padrão) ou `none` |
+| `--sat-source` | Fonte do SAT: `runtime` (padrão, via DMA `$4014`) ou `static-fallback` |
+| `--split-y` | Split vertical (pixels) para política de prioridade em 2 zonas (padrão: `48`) |
 | `--build` | Compila o ROM SMS após conversão |
 | `--run` | Abre no emulador após conversão (requer `--build`) |
 | `--emulator` | Caminho do emulador (padrão: auto-detect) |
@@ -176,6 +178,19 @@ Com diretório de saída customizado:
 
 ```powershell
 .\capture_sms_debug_artifacts.ps1 out/pong_sms -OutDir out/pong_sms/debug_artifacts/latest
+```
+
+Notas do gate determinístico:
+- `summary.json` é sempre gerado e vira o artefato principal de validação.
+- Dumps mandatórios: `vdp_registers.dump.txt`, `sprite_list.dump.txt`, `palette_*.hex`, `tiles_first256.hex`, `sat_y.bin`, `sat_xt.bin`.
+- PNG de VRAM/CRAM é best-effort (falha desses PNGs não invalida o gate).
+
+## Pixel Diff (<= 1.0%)
+
+Para medir aceitação visual por cena:
+
+```powershell
+.\measure_pixel_diff.ps1 referencia.png candidato.png -ThresholdPercent 1.0 -OutJson diff_result.json
 ```
 
 ## Tradução 6502→Z80

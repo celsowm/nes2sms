@@ -25,7 +25,14 @@ class TestWlaDxTemplates:
         """LoadTilemap should write visible entries to name table."""
         assert not re.search(r"(?ms)^\s*LoadTilemap:\s*ret\b", ASSETS_ASM)
         assert "ld   hl, $3800" in ASSETS_ASM
-        assert ".tilemap_loop:" in ASSETS_ASM
+        assert ".row_loop:" in ASSETS_ASM
+        assert ".col_loop:" in ASSETS_ASM
+        assert "PRIORITY_SPLIT_TILE" in ASSETS_ASM
+
+    def test_sprite_variant_map_is_declared(self):
+        """Assets template must expose SpriteVariantMap for runtime OAM remapping."""
+        assert "SpriteVariantMap:" in ASSETS_ASM
+        assert '.INCBIN "assets/sprite_variant_map.bin"' in ASSETS_ASM
 
     def test_reset_boot_order_uses_mapper_init(self):
         """RESET flow should initialize mapper and keep slot 2 stable."""

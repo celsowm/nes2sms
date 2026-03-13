@@ -57,6 +57,8 @@ class TestTileConverter:
         assert "0_H" in result.flip_index
         assert "0_V" in result.flip_index
         assert "0_HV" in result.flip_index
+        for key in ("0_H", "0_V", "0_HV"):
+            assert 0 <= result.flip_index[key] < len(result.sms_tiles)
 
     def test_flip_variants_unique(self):
         """Test that flip variants are unique."""
@@ -76,6 +78,26 @@ class TestTileConverter:
         assert h_idx != v_idx
         assert h_idx != hv_idx
         assert v_idx != hv_idx
+        assert max(result.flip_index.values()) < len(result.sms_tiles)
+
+    def test_flip_index_points_to_materialized_tiles(self):
+        """All cache indices must resolve to valid tiles inside tiles.bin payload."""
+        tile_16bpp = bytes([0xAA] * 16)
+        converter = TileConverter(color_maps=[[0, 1, 2, 3]], flip_strategy="cache")
+        result = converter.convert(tile_16bpp)
+
+        for _, index in result.flip_index.items():
+            assert 0 <= index < len(result.sms_tiles)
+            assert len(result.sms_tiles[index]) == 32
+
+    def test_flip_cache_saturation_warns_and_falls_back(self):
+        """When cache space is exhausted, converter should warn and skip extra variants."""
+        tile_16bpp = bytes([0xAA] * 16)
+        converter = TileConverter(color_maps=[[0, 1, 2, 3]], flip_strategy="cache", max_tiles=1)
+        result = converter.convert(tile_16bpp)
+
+        assert all(0 <= idx < len(result.sms_tiles) for idx in result.flip_index.values())
+        assert any("saturated" in warning for warning in result.warnings)
 
     def test_multi_bank_conversion(self):
         """Test multi-bank tile conversion."""

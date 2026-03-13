@@ -28,6 +28,18 @@ def main():
     p_convert.add_argument("--nes", required=True, help="Path to .nes ROM file")
     p_convert.add_argument("--out", required=True, help="Output directory")
     p_convert.add_argument("--flip-strategy", default="cache", choices=["cache", "none"])
+    p_convert.add_argument(
+        "--sat-source",
+        default="runtime",
+        choices=["runtime", "static-fallback"],
+        help="SAT source: runtime OAM DMA (default) or static fallback from extracted OAM",
+    )
+    p_convert.add_argument(
+        "--split-y",
+        type=int,
+        default=48,
+        help="Priority split Y (pixels) for 2-zone BG priority policy",
+    )
     p_convert.add_argument("--build", action="store_true", help="Build SMS ROM after conversion")
     p_convert.add_argument("--run", action="store_true", help="Open in emulator after conversion")
     p_convert.add_argument("--emulator", help="Path to emulator executable (default: auto-detect)")

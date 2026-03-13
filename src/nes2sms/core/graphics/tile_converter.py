@@ -12,16 +12,23 @@ class TileConverter:
     SMS tiles: 32 bytes (8x8 pixels, 4 bits per pixel)
     """
 
-    def __init__(self, color_maps: List[List[int]], flip_strategy: str = "cache"):
+    def __init__(
+        self,
+        color_maps: List[List[int]],
+        flip_strategy: str = "cache",
+        max_tiles: int = 512,
+    ):
         """
         Initialize tile converter.
 
         Args:
             color_maps: List of 4 color maps, each mapping NES color (0-3) to SMS index (0-15)
             flip_strategy: 'cache' to generate flip variants, 'none' to skip
+            max_tiles: Maximum number of tiles to materialize in the output set
         """
         self.color_maps = color_maps
         self.flip_strategy = flip_strategy
+        self.max_tiles = max_tiles
 
     def convert(self, chr_data: bytes, bank_id: Optional[int] = 0) -> TileConversionResult:
         """
@@ -38,17 +45,28 @@ class TileConverter:
         flip_index = {}
         warnings = []
         metadata = []
+        base_tiles = []
 
         num_tiles = len(chr_data) // 16
 
         for i in range(num_tiles):
             tile_2bpp = chr_data[i * 16 : (i + 1) * 16]
             sms_tile = self._convert_tile(tile_2bpp)
-            tiles.append(sms_tile)
+            base_tiles.append(sms_tile)
             metadata.append({"bank": bank_id, "tile_index": i})
 
-            if self.flip_strategy == "cache":
-                self._handle_flip_variants(i, sms_tile, flip_index, bank_id or 0)
+        tiles.extend(base_tiles)
+        if self.flip_strategy == "cache":
+            for i, sms_tile in enumerate(base_tiles):
+                self._handle_flip_variants(
+                    tile_index=i,
+                    sms_tile=sms_tile,
+                    flip_index=flip_index,
+                    tiles=tiles,
+                    metadata=metadata,
+                    warnings=warnings,
+                    bank_id=bank_id or 0,
+                )
 
         if len(chr_data) % 16 != 0:
             warnings.append(f"CHR data has {len(chr_data) % 16} extra bytes (incomplete tile)")
@@ -74,8 +92,10 @@ class TileConverter:
 
         for bank_id, chr_data in chr_banks:
             result = self.convert(chr_data, bank_id=bank_id)
+            tile_offset = len(all_tiles)
             all_tiles.extend(result.sms_tiles)
-            all_flip_index.update(result.flip_index)
+            for key, idx in result.flip_index.items():
+                all_flip_index[key] = idx + tile_offset
             all_warnings.extend(result.warnings)
             all_metadata.extend(result.tile_metadata)
 
@@ -86,7 +106,11 @@ class TileConverter:
             tile_metadata=all_metadata,
         )
 
-    def _convert_tile(self, tile_16bpp: bytes) -> bytes:
+    def convert_tile_with_map(self, tile_16bpp: bytes, color_map: List[int]) -> bytes:
+        """Convert a NES 2bpp tile using an explicit color map."""
+        return self._convert_tile(tile_16bpp, color_map=color_map)
+
+    def _convert_tile(self, tile_16bpp: bytes, color_map: Optional[List[int]] = None) -> bytes:
         """
         Convert single 16-byte NES tile to 32-byte SMS tile.
 
@@ -114,15 +138,32 @@ class TileConverter:
             for plane in range(4):
                 byte = 0
                 for x in range(8):
-                    # Use first color map (BG palette by default)
-                    sms_idx = self.color_maps[0][pixels[x]] if self.color_maps else pixels[x]
+                    if color_map is None:
+                        # Use first color map (BG palette by default)
+                        sms_idx = self.color_maps[0][pixels[x]] if self.color_maps else pixels[x]
+                    else:
+                        sms_idx = color_map[pixels[x]]
                     byte |= ((sms_idx >> plane) & 1) << (7 - x)
                 sms32[row * 4 + plane] = byte
 
         return bytes(sms32)
 
+    @staticmethod
+    def _find_tile_index(tiles: List[bytes], candidate: bytes) -> Optional[int]:
+        for idx, tile in enumerate(tiles):
+            if tile == candidate:
+                return idx
+        return None
+
     def _handle_flip_variants(
-        self, tile_index: int, sms_tile: bytes, flip_index: Dict, bank_id: Optional[int] = 0
+        self,
+        tile_index: int,
+        sms_tile: bytes,
+        flip_index: Dict,
+        tiles: List[bytes],
+        metadata: List[Dict],
+        warnings: List[str],
+        bank_id: Optional[int] = 0,
     ):
         """
         Handle flip variant generation for sprite cache.
@@ -131,20 +172,39 @@ class TileConverter:
             tile_index: Original tile index
             sms_tile: Converted SMS tile data
             flip_index: Dictionary to populate with flip variants
+            tiles: Materialized tile set (tiles.bin content)
+            metadata: Tile metadata list to keep output symbols aligned
+            warnings: Warning collector
             bank_id: CHR bank ID for unique keys
         """
         prefix = f"B{bank_id}_{tile_index}" if bank_id else f"{tile_index}"
-        # H flip
-        h_flip = self._flip_tile_h(sms_tile)
-        flip_index[f"{prefix}_H"] = len(flip_index) + 1
+        variants = (
+            ("H", self._flip_tile_h(sms_tile)),
+            ("V", self._flip_tile_v(sms_tile)),
+            ("HV", self._flip_tile_v(self._flip_tile_h(sms_tile))),
+        )
+        for suffix, variant_tile in variants:
+            key = f"{prefix}_{suffix}"
+            existing = self._find_tile_index(tiles, variant_tile)
+            if existing is not None:
+                flip_index[key] = existing
+                continue
 
-        # V flip
-        v_flip = self._flip_tile_v(sms_tile)
-        flip_index[f"{prefix}_V"] = len(flip_index) + 2
+            if len(tiles) >= self.max_tiles:
+                warnings.append(
+                    f"Flip variant cache saturated at {self.max_tiles} tiles; missing {key}"
+                )
+                continue
 
-        # HV flip
-        hv_flip = self._flip_tile_v(self._flip_tile_h(v_flip))
-        flip_index[f"{prefix}_HV"] = len(flip_index) + 3
+            flip_index[key] = len(tiles)
+            tiles.append(variant_tile)
+            metadata.append(
+                {
+                    "bank": bank_id,
+                    "tile_index": tile_index,
+                    "variant": suffix,
+                }
+            )
 
     @staticmethod
     def _flip_tile_h(tile32: bytes) -> bytes:
