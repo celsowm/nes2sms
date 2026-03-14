@@ -389,6 +389,8 @@ Direct parallel read (no strobe required):
 | D-Pad      | D-Pad       | Direct 1:1                         |
 
 NMI on PAUSE: the NMI handler ($0066) must implement what the NES Start ISR did.
+Recommended runtime bridge: call a HAL hook from $0066 to arm a one-shot NES Start
+bit that is consumed on the next controller latch/read sequence.
 
 ---
 

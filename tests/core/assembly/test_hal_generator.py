@@ -101,3 +101,26 @@ class TestHalGenerator:
     def test_oam_dma_embeds_priority_split_threshold(self):
         oam_code = HALGenerator(split_y=64).generate_oam_dma_routine()
         assert "cp   64" in oam_code
+
+    def test_input_hal_exports_pause_nmi_hook(self):
+        input_code = HALGenerator().generate_input_routines()
+        assert ".export hal_input_on_pause_nmi" in input_code
+        assert "hal_input_on_pause_nmi:" in input_code
+        assert "_input_start_p1_pending" in input_code
+
+    def test_input_hal_tracks_strobe_and_live_states(self):
+        input_code = HALGenerator().generate_input_routines()
+        assert "_input_strobe_p1: .db $00" in input_code
+        assert "_input_strobe_p2: .db $00" in input_code
+        assert "_input_live_p1:   .db $00" in input_code
+        assert "_input_live_p2:   .db $00" in input_code
+
+    def test_input_hal_shift_path_fills_high_bit_with_one(self):
+        input_code = HALGenerator().generate_input_routines()
+        assert "_read_p1_shift:" in input_code
+        assert "_read_p2_shift:" in input_code
+        assert "set  7, a" in input_code
+
+    def test_input_hal_maps_select_from_dual_buttons(self):
+        input_code = HALGenerator().generate_input_routines()
+        assert "set  2, a                    ; Select = BTN1+BTN2" in input_code

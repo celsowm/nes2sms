@@ -3,7 +3,8 @@ param(
     [string]$ProjectDir,
     [string]$EmulatorPath,
     [switch]$DebugCLI,
-    [switch]$GdbStub
+    [switch]$GdbStub,
+    [switch]$SkipKeyboardCapture
 )
 
 $ErrorActionPreference = "Stop"
@@ -83,6 +84,131 @@ function Get-EmulatorHelpText {
     }
 }
 
+function Ensure-WindowInputType {
+    if (([System.Management.Automation.PSTypeName]'Win32InputBridge').Type) {
+        return
+    }
+
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class Win32InputBridge
+{
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+}
+"@
+}
+
+function Wait-MainWindowHandle {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Process]$Process,
+        [int]$TimeoutMs = 12000
+    )
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($sw.ElapsedMilliseconds -lt $TimeoutMs) {
+        if ($Process.HasExited) {
+            return [IntPtr]::Zero
+        }
+
+        $Process.Refresh()
+        if ($Process.MainWindowHandle -ne [IntPtr]::Zero) {
+            return $Process.MainWindowHandle
+        }
+
+        Start-Sleep -Milliseconds 180
+    }
+
+    return [IntPtr]::Zero
+}
+
+function Focus-EmulatorWindow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$WindowHandle,
+        [Parameter(Mandatory = $true)]
+        [int]$ProcessId
+    )
+
+    Ensure-WindowInputType
+    [void][Win32InputBridge]::SetForegroundWindow($WindowHandle)
+    try {
+        $wshell = New-Object -ComObject WScript.Shell
+        [void]$wshell.AppActivate($ProcessId)
+    }
+    catch {
+        # Best effort only.
+    }
+    Start-Sleep -Milliseconds 140
+
+    $foreground = [Win32InputBridge]::GetForegroundWindow()
+    return ($foreground -eq $WindowHandle)
+}
+
+function Send-KeyboardCaptureToggle {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IntPtr]$WindowHandle
+    )
+
+    Ensure-WindowInputType
+    $WM_KEYDOWN = 0x0100
+    $WM_KEYUP = 0x0101
+    $VK_RCONTROL = 0xA3
+    $KEYEVENTF_EXTENDEDKEY = 0x0001
+    $KEYEVENTF_KEYUP = 0x0002
+
+    [void][Win32InputBridge]::PostMessage($WindowHandle, $WM_KEYDOWN, [IntPtr]$VK_RCONTROL, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 35
+    [void][Win32InputBridge]::PostMessage($WindowHandle, $WM_KEYUP, [IntPtr]$VK_RCONTROL, [IntPtr]::Zero)
+
+    [Win32InputBridge]::keybd_event([byte]$VK_RCONTROL, 0, $KEYEVENTF_EXTENDEDKEY, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 35
+    [Win32InputBridge]::keybd_event([byte]$VK_RCONTROL, 0, ($KEYEVENTF_EXTENDEDKEY -bor $KEYEVENTF_KEYUP), [UIntPtr]::Zero)
+}
+
+function Try-EnableKeyboardCapture {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Process]$Process
+    )
+
+    if ($SkipKeyboardCapture) {
+        Write-Host "Keyboard: skip auto-capture (-SkipKeyboardCapture)." -ForegroundColor Yellow
+        Write-Host "Fallback: if controls do not respond, press Right Ctrl in BlastEm." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "Keyboard: trying automatic capture (Right Ctrl)..." -ForegroundColor Cyan
+    $windowHandle = Wait-MainWindowHandle -Process $Process
+    if ($windowHandle -eq [IntPtr]::Zero) {
+        Write-Host "WARNING: could not detect BlastEm window in time." -ForegroundColor Yellow
+        Write-Host "Fallback: if controls do not respond, press Right Ctrl in BlastEm." -ForegroundColor Yellow
+        return
+    }
+
+    $focused = Focus-EmulatorWindow -WindowHandle $windowHandle -ProcessId $Process.Id
+    if (-not $focused) {
+        Write-Host "WARNING: could not confirm BlastEm window focus before key capture." -ForegroundColor Yellow
+    }
+
+    Send-KeyboardCaptureToggle -WindowHandle $windowHandle
+    Write-Host "Keyboard: capture toggle sent (1 attempt)." -ForegroundColor Green
+    Write-Host "Fallback: if controls still do not respond, press Right Ctrl in BlastEm." -ForegroundColor Yellow
+}
+
 $baseDir = $PSScriptRoot
 $resolvedProject = Resolve-ProjectPath -BaseDir $baseDir -Dir $ProjectDir
 $romPath = Find-RomFile -ProjectPath $resolvedProject
@@ -119,6 +245,9 @@ Write-Host "  c = CRAM debug view"
 Write-Host "  b = plane debug view"
 Write-Host "  n = compositing debug view"
 Write-Host "  p = screenshot"
+Write-Host "  Right Ctrl = capture/release keyboard"
+Write-Host ""
+Write-Host "Gameplay controls (default): arrows = d-pad, A/S = buttons" -ForegroundColor Cyan
 
 $argumentList = @()
 $argumentList += "-m"
@@ -139,4 +268,5 @@ $argumentList += ('"' + $romPath + '"')
 $argumentString = ($argumentList -join " ")
 Write-Host "Args    : $argumentString"
 
-Start-Process -FilePath $resolvedEmulator -ArgumentList $argumentString
+$emulatorProcess = Start-Process -FilePath $resolvedEmulator -ArgumentList $argumentString -PassThru
+Try-EnableKeyboardCapture -Process $emulatorProcess

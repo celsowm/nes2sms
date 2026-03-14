@@ -46,6 +46,12 @@ class TestWlaDxTemplates:
         assert "call NMI_Handler" in INTERRUPTS_ASM
         assert ".ifdef NMI_Handler" not in INTERRUPTS_ASM
 
+    def test_pause_nmi_arms_virtual_start_hook(self):
+        """SMS PAUSE/NMI path should arm the virtual Start pulse in HAL."""
+        assert "SMS_NMI_Handler:" in INTERRUPTS_ASM
+        assert "call hal_input_on_pause_nmi" in INTERRUPTS_ASM
+        assert "retn" in INTERRUPTS_ASM
+
 
 class TestStubGeneratorEntryPoint:
     """Validate GameMain routing in generated game_logic."""

@@ -164,7 +164,19 @@ Modo GDB remote stub:
 .\run_sms.ps1 out/pong_sms -GdbStub
 ```
 
+Pular tentativa automatica de captura de teclado:
+
+```powershell
+.\run_sms.ps1 out/pong_sms -SkipKeyboardCapture
+```
+
 > Nota: algumas versões do BlastEm não suportam `-D`. O script detecta isso e ignora a flag automaticamente.
+
+### Controles no BlastEm
+
+- Setas = direcional
+- `A` e `S` = botoes
+- `Right Ctrl` = captura/libera teclado (se nada responder, pressione essa tecla)
 
 ## Coleta Automática de Artefatos de Debug (sem interação manual)
 

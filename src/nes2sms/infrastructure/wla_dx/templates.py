@@ -108,6 +108,7 @@ INT_Handler:
     reti
 
 SMS_NMI_Handler:
+    call hal_input_on_pause_nmi
     retn
 """
 
@@ -318,6 +319,9 @@ PSG_SetVolume:
 """
 
 HAL_INPUT_ASM = """
+; Legacy shim HAL.
+; The canonical NES $4016/$4017 behavior lives in hal/support.asm
+; (hal_input_write/hal_input_read/hal_input_on_pause_nmi).
 .export Input_Init
 .export Input_ReadP1
 .export Input_ReadP2

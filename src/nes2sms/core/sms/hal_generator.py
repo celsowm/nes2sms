@@ -621,28 +621,98 @@ hal_apu_read:
         return """
 .export hal_input_write
 .export hal_input_read
+.export hal_input_on_pause_nmi
 
 hal_input_write:
-    ; A = Value, L = Port (0 or 1)
-    ; When A=$01 (strobe high), latch the current button state
-    cp   $01
-    ret  nz
+    ; A = Value (bit0=strobe), L = Port (0 or 1)
+    ; strobe=1: reads return current A button (no shift)
+    ; strobe=0: reads shift serialized latch
+    ld   c, a
     ld   a, l
     or   a
-    jr   nz, _latch_p2
-    in   a, ($DC)
-    cpl
-    call _remap_sms_to_nes
+    jr   nz, _input_write_p2
+
+    ; Port 0 ($4016)
+    ld   a, (_input_strobe_p1)
+    ld   b, a                    ; previous strobe
+    ld   a, c
+    and  $01
+    ld   (_input_strobe_p1), a
+    or   a
+    jr   z, _input_write_p1_low
+    call _input_capture_p1
+    ret
+_input_write_p1_low:
+    ld   a, b
+    or   a
+    jr   z, _input_write_done
+    call _input_capture_p1
+    ret
+
+_input_write_p2:
+    ; Port 1 ($4017)
+    ld   a, (_input_strobe_p2)
+    ld   b, a                    ; previous strobe
+    ld   a, c
+    and  $01
+    ld   (_input_strobe_p2), a
+    or   a
+    jr   z, _input_write_p2_low
+    call _input_capture_p2
+    ret
+_input_write_p2_low:
+    ld   a, b
+    or   a
+    jr   z, _input_write_done
+    call _input_capture_p2
+    ret
+_input_write_done:
+    ret
+
+hal_input_on_pause_nmi:
+    ; SMS PAUSE/NMI maps to NES Start pulse for next P1 latch.
+    ld   a, $01
+    ld   (_input_start_p1_pending), a
+    ret
+
+_input_capture_p1:
+    call _input_read_sms_p1
+    call _map_sms_to_nes
+    ld   b, a
+    ld   a, (_input_start_p1_pending)
+    or   a
+    jr   z, _input_capture_p1_no_start
+    ld   a, b
+    set  3, a                    ; NES Start
+    ld   b, a
+    xor  a
+    ld   (_input_start_p1_pending), a
+_input_capture_p1_no_start:
+    ld   a, b
+    ld   (_input_live_p1), a
     ld   (_input_latch_p1), a
     ret
-_latch_p2:
-    in   a, ($DD)
-    cpl
-    call _remap_sms_to_nes
+
+_input_capture_p2:
+    call _input_read_sms_p2
+    call _map_sms_to_nes
+    ld   (_input_live_p2), a
     ld   (_input_latch_p2), a
     ret
 
-_remap_sms_to_nes:
+_input_read_sms_p1:
+    in   a, ($DC)
+    cpl
+    and  $3F
+    ret
+
+_input_read_sms_p2:
+    in   a, ($DD)
+    cpl
+    and  $3F
+    ret
+
+_map_sms_to_nes:
     ; Input A: SMS format (Up=b0,Down=b1,Left=b2,Right=b3,Btn1=b4,Btn2=b5)
     ; Output A: NES serial order (A=b0,B=b1,Sel=b2,Start=b3,Up=b4,Down=b5,Left=b6,Right=b7)
     push bc
@@ -654,6 +724,11 @@ _remap_sms_to_nes:
 +:  bit  5, b
     jr   z, +
     set  1, a
++:  bit  4, b
+    jr   z, +
+    bit  5, b
+    jr   z, +
+    set  2, a                    ; Select = BTN1+BTN2
 +:  bit  0, b
     jr   z, +
     set  4, a
@@ -672,28 +747,52 @@ _remap_sms_to_nes:
 hal_input_read:
     ; L = Port (0 or 1)
     ; Returns bit 0 = current button state (NES serial style)
-    ; Each call shifts the latch right, returning one bit at a time
+    ; strobe=1: returns current A (no shift)
+    ; strobe=0: shifts latch right, filling bit 7 with 1
     ld   a, l
     or   a
     jr   nz, _read_p2
+    ld   a, (_input_strobe_p1)
+    or   a
+    jr   z, _read_p1_shift
+    call _input_capture_p1
+    ld   a, (_input_live_p1)
+    and  $01
+    ret
+_read_p1_shift:
     ld   a, (_input_latch_p1)
     ld   b, a
     srl  a
+    set  7, a
     ld   (_input_latch_p1), a
     ld   a, b
     and  $01
     ret
 _read_p2:
+    ld   a, (_input_strobe_p2)
+    or   a
+    jr   z, _read_p2_shift
+    call _input_capture_p2
+    ld   a, (_input_live_p2)
+    and  $01
+    ret
+_read_p2_shift:
     ld   a, (_input_latch_p2)
     ld   b, a
     srl  a
+    set  7, a
     ld   (_input_latch_p2), a
     ld   a, b
     and  $01
     ret
 
+_input_strobe_p1: .db $00
+_input_strobe_p2: .db $00
+_input_live_p1:   .db $00
+_input_live_p2:   .db $00
 _input_latch_p1: .db $00
 _input_latch_p2: .db $00
+_input_start_p1_pending: .db $00
 """
 
     def generate_oam_dma_routine(self) -> str:
