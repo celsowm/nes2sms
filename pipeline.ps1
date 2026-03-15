@@ -1,23 +1,37 @@
 param (
     [string]$Rom = "homebrews/pong.nes",
     [string]$OutDir = "out/pong_sms",
-    [switch]$Run
+    [switch]$Run,
+    [switch]$CleanOut
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "=== NES2SMS Pipeline ===" -ForegroundColor Cyan
 
-# Setup command
-$nes2sms = "nes2sms"
+if (!(Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Host "`n=== ERROR ===" -ForegroundColor Red
+    Write-Host "Python não encontrado no PATH. Instale/configure Python para usar o pipeline." -ForegroundColor Red
+    exit 1
+}
+
+$convertArgs = @("-m", "nes2sms.cli.main", "convert", "--nes", $Rom, "--out", $OutDir, "--build")
+
+Write-Host "[config] CLI command: python -m nes2sms.cli.main" -ForegroundColor DarkCyan
+Write-Host "[config] Output directory: $OutDir" -ForegroundColor DarkCyan
+if ($CleanOut) {
+    if (Test-Path $OutDir) {
+        Write-Host "[config] Cleaning existing output directory..." -ForegroundColor Yellow
+        Remove-Item -Path $OutDir -Recurse -Force
+    }
+    else {
+        Write-Host "[config] Clean requested, but output directory does not exist yet." -ForegroundColor DarkCyan
+    }
+}
 
 # Step 1: One-step conversion + build (official flow)
 Write-Host "`n[1/2] Running one-step convert --build..." -ForegroundColor Cyan
-$convertArgs = @("convert", "--nes", $Rom, "--out", $OutDir, "--build")
-if ($Run) {
-    $convertArgs += "--run"
-}
-& $nes2sms @convertArgs
+& python @convertArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "`n=== ERROR ===" -ForegroundColor Red
     Write-Host "Conversion failed with exit code $LASTEXITCODE" -ForegroundColor Red
@@ -59,7 +73,13 @@ if (Test-Path $romPath) {
     Write-Host "`n=== SUCCESS ===" -ForegroundColor Green
     Write-Host "ROM created: $romPath" -ForegroundColor Green
     if ($Run) {
-        Write-Host "Emulator launch was requested and handled by 'nes2sms convert --run'." -ForegroundColor Green
+        Write-Host "Launching ROM via run_sms.ps1 (with keyboard capture helper)..." -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot "run_sms.ps1") $OutDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "`n=== ERROR ===" -ForegroundColor Red
+            Write-Host "run_sms.ps1 failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
     }
 }
 else {

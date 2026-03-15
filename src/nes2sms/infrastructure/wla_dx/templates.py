@@ -79,6 +79,9 @@ RESET:
     call VDP_Init
     call PSG_Init
     call Mapper_Init
+    ; Configure controller I/O lines as input/high (standard joypad mode)
+    ld   a, $FF
+    out  ($3F), a
     call ClearVRAM
     call LoadPalettes
     call LoadTiles

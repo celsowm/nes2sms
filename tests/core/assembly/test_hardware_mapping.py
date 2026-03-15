@@ -40,6 +40,12 @@ class TestHardwareMapping:
         assert "CALL hal_input_read" in result
         assert "LD   l, 0" in result
 
+    def test_input_write_interception_for_4017(self):
+        """Test that STA $4017 remains mapped to hal_input_write (port 1)."""
+        result = self.translator.translate_line("STA $4017")
+        assert "CALL hal_input_write" in result
+        assert "LD   l, 1" in result
+
     def test_normal_memory_not_intercepted(self):
         """Test that normal RAM access is NOT intercepted."""
         result = self.translator.translate_line("STA $1234")

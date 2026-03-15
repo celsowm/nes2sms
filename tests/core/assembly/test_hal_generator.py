@@ -108,18 +108,49 @@ class TestHalGenerator:
         assert "hal_input_on_pause_nmi:" in input_code
         assert "_input_start_p1_pending" in input_code
 
-    def test_input_hal_tracks_strobe_and_live_states(self):
+    def test_input_hal_tracks_shared_strobe_and_live_states(self):
         input_code = HALGenerator().generate_input_routines()
-        assert "_input_strobe_p1: .db $00" in input_code
-        assert "_input_strobe_p2: .db $00" in input_code
+        assert "_input_strobe: .db $00" in input_code
+        assert "_input_strobe_p1" not in input_code
+        assert "_input_strobe_p2" not in input_code
         assert "_input_live_p1:   .db $00" in input_code
         assert "_input_live_p2:   .db $00" in input_code
+
+    def test_input_hal_ignores_4017_strobe_writes(self):
+        input_code = HALGenerator().generate_input_routines()
+        write_start = input_code.index("hal_input_write:")
+        write_end = input_code.index("hal_input_on_pause_nmi:")
+        block = input_code[write_start:write_end]
+
+        assert "_input_write_ignore_p2:" in block
+        assert "$4017" in block
+
+    def test_input_hal_reads_p2_from_dc_and_dd(self):
+        input_code = HALGenerator().generate_input_routines()
+        start = input_code.index("_input_read_sms_p2:")
+        end = input_code.index("_map_sms_to_nes:")
+        block = input_code[start:end]
+
+        assert "in   a, ($DC)" in block
+        assert "and  $C0" in block
+        assert "in   a, ($DD)" in block
+        assert "and  $0F" in block
+        assert "set  0, a" in block
+        assert "set  5, a" in block
 
     def test_input_hal_shift_path_fills_high_bit_with_one(self):
         input_code = HALGenerator().generate_input_routines()
         assert "_read_p1_shift:" in input_code
         assert "_read_p2_shift:" in input_code
         assert "set  7, a" in input_code
+
+    def test_input_hal_uses_shared_strobe_for_both_ports(self):
+        input_code = HALGenerator().generate_input_routines()
+        start = input_code.index("hal_input_read:")
+        end = input_code.index("_input_strobe: .db $00")
+        block = input_code[start:end]
+
+        assert block.count("ld   a, (_input_strobe)") == 2
 
     def test_input_hal_maps_select_from_dual_buttons(self):
         input_code = HALGenerator().generate_input_routines()
