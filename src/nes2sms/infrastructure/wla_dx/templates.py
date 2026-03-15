@@ -33,6 +33,15 @@ PaletteBG:
     .INCBIN "assets/palette_bg.bin"
 PaletteSPR:
     .INCBIN "assets/palette_spr.bin"
+Tilemap:
+    .INCBIN "assets/tilemap.bin"
+Tilemap_End:
+SAT_Y:
+    .INCBIN "assets/sat_y.bin"
+SAT_Y_End:
+SAT_XT:
+    .INCBIN "assets/sat_xt.bin"
+SAT_XT_End:
 
 .include "assets.asm" ; Only contains loading logic now
 .ENDS
@@ -168,40 +177,25 @@ LoadTiles:
 
 .export LoadTilemap
 LoadTilemap:
-    ; Clear name table and apply coarse priority zoning.
     ld   hl, $3800
     call VDP_SetWriteAddress
-    ld   d, 0
-.row_loop:
-    ld   e, 32
-    ld   a, d
-    cp   PRIORITY_SPLIT_TILE
-    jr   c, .row_no_prio
-    ld   c, $10
-    jr   .row_prio_ready
-.row_no_prio:
-    ld   c, $00
-.row_prio_ready:
-.col_loop:
-    xor  a
-    out  ($BE), a
-    ld   a, c
-    out  ($BE), a
-    dec  e
-    jr   nz, .col_loop
-    inc  d
-    ld   a, d
-    cp   28
-    jr   nz, .row_loop
+    ld   hl, Tilemap
+    ld   bc, Tilemap_End - Tilemap
+    call VDP_CopyBytes
     ret
 
 .export LoadSAT
 LoadSAT:
-    ; Hide all sprites by placing end marker in first SAT Y entry.
     ld   hl, $3F00
     call VDP_SetWriteAddress
-    ld   a, $D0
-    out  ($BE), a
+    ld   hl, SAT_Y
+    ld   bc, SAT_Y_End - SAT_Y
+    call VDP_CopyBytes
+    ld   hl, $3F80
+    call VDP_SetWriteAddress
+    ld   hl, SAT_XT
+    ld   bc, SAT_XT_End - SAT_XT
+    call VDP_CopyBytes
     ret
 
 .export SpriteVariantMap
@@ -210,6 +204,9 @@ SpriteVariantMap:
 
 ; Helper to copy BC bytes from HL to VDP
 VDP_CopyBytes:
+    ld   a, b
+    or   c
+    ret  z
     ld   a, (hl)
     out  ($BE), a
     inc  hl

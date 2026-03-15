@@ -7,6 +7,7 @@ from nes2sms.infrastructure.wla_dx.templates import (
     ASSETS_ASM,
     INIT_ASM,
     INTERRUPTS_ASM,
+    MAIN_ASM,
     MEMORY_INC,
 )
 from nes2sms.shared.models import Symbol
@@ -27,12 +28,21 @@ class TestWlaDxTemplates:
         assert "ld   bc, Tiles_End - Tiles" in ASSETS_ASM
 
     def test_loadtilemap_populates_name_table(self):
-        """LoadTilemap should write visible entries to name table."""
+        """LoadTilemap should stream a generated tilemap asset to VRAM."""
         assert not re.search(r"(?ms)^\s*LoadTilemap:\s*ret\b", ASSETS_ASM)
         assert "ld   hl, $3800" in ASSETS_ASM
-        assert ".row_loop:" in ASSETS_ASM
-        assert ".col_loop:" in ASSETS_ASM
-        assert "PRIORITY_SPLIT_TILE" in ASSETS_ASM
+        assert "ld   hl, Tilemap" in ASSETS_ASM
+        assert "ld   bc, Tilemap_End - Tilemap" in ASSETS_ASM
+        assert '.INCBIN "assets/tilemap.bin"' in MAIN_ASM
+
+    def test_loadsat_streams_sat_assets(self):
+        """LoadSAT should stream generated SAT payloads instead of hardcoding hidden sprites."""
+        assert "ld   hl, SAT_Y" in ASSETS_ASM
+        assert "ld   bc, SAT_Y_End - SAT_Y" in ASSETS_ASM
+        assert "ld   hl, SAT_XT" in ASSETS_ASM
+        assert "ld   bc, SAT_XT_End - SAT_XT" in ASSETS_ASM
+        assert '.INCBIN "assets/sat_y.bin"' in MAIN_ASM
+        assert '.INCBIN "assets/sat_xt.bin"' in MAIN_ASM
 
     def test_sprite_variant_map_is_declared(self):
         """Assets template must expose SpriteVariantMap for runtime OAM remapping."""

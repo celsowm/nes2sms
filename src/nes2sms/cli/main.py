@@ -40,6 +40,24 @@ def main():
         default=48,
         help="Priority split Y (pixels) for 2-zone BG priority policy",
     )
+    p_convert.add_argument(
+        "--graphics-source",
+        default="runtime",
+        choices=["runtime", "static", "hybrid"],
+        help="Graphics source: runtime capture, legacy static heuristics, or runtime with static fallback",
+    )
+    p_convert.add_argument(
+        "--capture-frame",
+        type=int,
+        default=120,
+        help="NES frame number to capture for runtime graphics",
+    )
+    p_convert.add_argument(
+        "--capture-timeout-seconds",
+        type=int,
+        default=30,
+        help="Timeout for runtime graphics capture",
+    )
     p_convert.add_argument("--build", action="store_true", help="Build SMS ROM after conversion")
     p_convert.add_argument("--run", action="store_true", help="Open in emulator after conversion")
     p_convert.add_argument("--emulator", help="Path to emulator executable (default: auto-detect)")

@@ -138,6 +138,9 @@ def test_cmd_bootstrap_hello_no_run_does_not_resolve_or_launch_emulators(
     assert convert_args.build is True
     assert convert_args.run is False
     assert convert_args.emulator is None
+    assert convert_args.graphics_source == "hybrid"
+    assert convert_args.capture_frame == 120
+    assert convert_args.capture_timeout_seconds == 30
     assert Path(convert_args.out) == out_dir / "sms"
     assert Path(convert_args.nes) == rom_path
 
@@ -184,6 +187,7 @@ def test_cmd_bootstrap_hello_run_passes_sms_emulator_and_launches_nes(
     assert convert_args.run is True
     assert convert_args.build is True
     assert convert_args.emulator == str(blastem)
+    assert convert_args.graphics_source == "hybrid"
 
     launch_emulator, launch_rom = captured["launch"]
     assert launch_emulator == fceux
