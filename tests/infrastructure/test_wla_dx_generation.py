@@ -3,7 +3,12 @@
 import re
 
 from nes2sms.infrastructure.wla_dx.stub_generator import StubGenerator
-from nes2sms.infrastructure.wla_dx.templates import ASSETS_ASM, INIT_ASM, INTERRUPTS_ASM
+from nes2sms.infrastructure.wla_dx.templates import (
+    ASSETS_ASM,
+    INIT_ASM,
+    INTERRUPTS_ASM,
+    MEMORY_INC,
+)
 from nes2sms.shared.models import Symbol
 
 
@@ -40,6 +45,11 @@ class TestWlaDxTemplates:
         assert "call LoadTiles" in INIT_ASM
         assert "call LoadTilemap" in INIT_ASM
         assert "ld   ($FFFF), a" not in INIT_ASM
+
+    def test_hal_state_uses_high_wram_not_relocated_nes_ram(self):
+        """HAL scratch state must stay out of the relocated NES $0000-$07FF window."""
+        assert ".ENUM $DF00 EXPORT" in MEMORY_INC
+        assert ".ENUM $C000 EXPORT" not in MEMORY_INC
 
     def test_interrupt_handler_always_dispatches_nmi_handler(self):
         """INT handler should always dispatch to game NMI routine."""

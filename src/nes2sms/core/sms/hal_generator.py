@@ -535,7 +535,7 @@ _ppu_read_status:
     in   a, ($BF)
     ret
 
-; PPU state variables are absolute WRAM labels from memory.inc (.ENUM $C000)
+; PPU state variables are absolute WRAM labels from memory.inc (.ENUM $DF00)
 
 _ppu_advance_vram_addr:
     ; Emulate NES internal VRAM increment after each PPUDATA write.
@@ -832,7 +832,7 @@ _input_read_done:
     pop  bc
     ret
 
-; Input state variables are absolute WRAM labels from memory.inc (.ENUM $C000)
+; Input state variables are absolute WRAM labels from memory.inc (.ENUM $DF00)
 """
 
     def generate_oam_dma_routine(self) -> str:
@@ -956,7 +956,7 @@ _oam_lookup_ready:
     ld   a, (hl)
     ret
 
-; OAM state variables are absolute WRAM labels from memory.inc (.ENUM $C000)
+; OAM state variables are absolute WRAM labels from memory.inc (.ENUM $DF00)
 """
 
     def generate_utility_routines(self) -> str:

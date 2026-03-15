@@ -110,11 +110,12 @@ class TestHalGenerator:
 
     def test_input_hal_tracks_shared_strobe_and_live_states(self):
         input_code = HALGenerator().generate_input_routines()
-        assert "_input_strobe: .db $00" in input_code
+        assert "_input_strobe" in input_code
         assert "_input_strobe_p1" not in input_code
         assert "_input_strobe_p2" not in input_code
-        assert "_input_live_p1:   .db $00" in input_code
-        assert "_input_live_p2:   .db $00" in input_code
+        assert "_input_live_p1" in input_code
+        assert "_input_live_p2" in input_code
+        assert ".db $00" not in input_code
 
     def test_input_hal_ignores_4017_strobe_writes(self):
         input_code = HALGenerator().generate_input_routines()
@@ -147,7 +148,7 @@ class TestHalGenerator:
     def test_input_hal_uses_shared_strobe_for_both_ports(self):
         input_code = HALGenerator().generate_input_routines()
         start = input_code.index("hal_input_read:")
-        end = input_code.index("_input_strobe: .db $00")
+        end = input_code.index("; Input state variables are absolute WRAM labels")
         block = input_code[start:end]
 
         assert block.count("ld   a, (_input_strobe)") == 2

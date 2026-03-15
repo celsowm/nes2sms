@@ -57,7 +57,7 @@ MEMORY_INC = """.ROMBANKMAP
     SLOT 3 $C000 $2000
 .ENDME
 
-.ENUM $C000 EXPORT
+.ENUM $DF00 EXPORT
 _ppu_addr_toggle:  db
 _ppu_addr_hi:      db
 _ppu_addr_lo:      db
