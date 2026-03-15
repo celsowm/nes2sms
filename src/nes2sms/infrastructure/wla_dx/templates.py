@@ -56,6 +56,28 @@ MEMORY_INC = """.ROMBANKMAP
     SLOT 2 $8000 $4000
     SLOT 3 $C000 $2000
 .ENDME
+
+.ENUM $C000 EXPORT
+_ppu_addr_toggle:  db
+_ppu_addr_hi:      db
+_ppu_addr_lo:      db
+_ppu_write_mode:   db
+_ppu_scroll_x:     db
+_ppu_scroll_y:     db
+_ppu_attr_value:   db
+_ppu_chr_data:     db
+_ppu_ctrl_shadow:  db
+_vdp_reg1_shadow:  db
+_vdp_reg15_shadow: db
+_input_strobe:     db
+_input_live_p1:    db
+_input_live_p2:    db
+_input_latch_p1:   db
+_input_latch_p2:   db
+_input_start_p1_pending: db
+_oam_prio_top:     db
+_oam_prio_bottom:  db
+.ENDE
 """
 
 INIT_ASM = """
@@ -79,6 +101,7 @@ RESET:
     call VDP_Init
     call PSG_Init
     call Mapper_Init
+    call HAL_StateInit
     ; Configure controller I/O lines as input/high (standard joypad mode)
     ld   a, $FF
     out  ($3F), a
