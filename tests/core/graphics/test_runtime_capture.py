@@ -77,6 +77,19 @@ def test_assess_runtime_capture_accepts_nonempty_snapshot():
     assert reason == ""
 
 
+def test_assess_runtime_capture_accepts_palette_and_oam_without_nametable():
+    payload = _capture_payload()
+    payload["ppu_vram"] = [0] * 0x1000
+    payload["palette_ram"][0] = 0x0C
+    payload["oam"][0:4] = [20, 3, 0, 40]
+    capture = RuntimeGraphicsCapture.from_dict(payload)
+
+    usable, reason = assess_runtime_capture(capture)
+
+    assert usable
+    assert reason == ""
+
+
 def test_blank_tilemap_and_sat_are_always_nonempty():
     tilemap = build_blank_tilemap(blank_tile_index=3, split_tile=2, rows=4, cols=2)
     sat_y, sat_xt = build_blank_sat()
