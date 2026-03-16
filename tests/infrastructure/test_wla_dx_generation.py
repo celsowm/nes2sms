@@ -56,6 +56,13 @@ class TestWlaDxTemplates:
         assert "call LoadTilemap" in INIT_ASM
         assert "ld   ($FFFF), a" not in INIT_ASM
 
+    def test_vdp_init_writes_backdrop_register(self):
+        """VDP init should explicitly program register 7 for backdrop color selection."""
+        from nes2sms.infrastructure.wla_dx.templates import HAL_VDP_ASM
+
+        assert "ld   a, 7" in HAL_VDP_ASM
+        assert "Register 7: Backdrop color uses BG palette slot 0" in HAL_VDP_ASM
+
     def test_hal_state_uses_high_wram_not_relocated_nes_ram(self):
         """HAL scratch state must stay out of the relocated NES $0000-$07FF window."""
         assert ".ENUM $DF00 EXPORT" in MEMORY_INC

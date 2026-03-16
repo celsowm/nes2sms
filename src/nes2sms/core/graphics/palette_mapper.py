@@ -105,6 +105,35 @@ class PaletteMapper:
         """Calculate Euclidean distance between two RGB colors."""
         return sum((a - b) ** 2 for a, b in zip(c1, c2))
 
+    @classmethod
+    def build_nes_to_sms_lookup(cls) -> List[int]:
+        """Build the canonical 64-entry NES-to-SMS color lookup table."""
+        return [cls.nes_color_to_sms(index) for index in range(64)]
+
+    @classmethod
+    def build_nes_to_sms_lookup_asm(cls) -> str:
+        """Render the canonical lookup table as four WLA-DX .db rows."""
+        lookup = cls.build_nes_to_sms_lookup()
+        lines = []
+        for start in range(0, 64, 16):
+            chunk = lookup[start : start + 16]
+            entries = ", ".join(f"${value:02X}" for value in chunk)
+            lines.append(f"    .db {entries}  ; ${start:02X}-${start + 15:02X}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _normalize_bg_palette_ram(palette_ram: List[int]) -> List[int]:
+        """Force BG sub-palette entry 0 to use the universal NES backdrop color."""
+        normalized = list(palette_ram[:16])
+        if not normalized:
+            return normalized
+
+        backdrop = normalized[0] & 0x3F
+        for offset in (0, 4, 8, 12):
+            if offset < len(normalized):
+                normalized[offset] = backdrop
+        return normalized
+
     def build_sms_palette(self, slot: str = "bg") -> Tuple[bytes, List[List[int]]]:
         """
         Build 16-entry SMS palette from NES palette RAM.
@@ -119,7 +148,7 @@ class PaletteMapper:
         """
         # Select appropriate palette RAM section
         if slot == "bg":
-            palette_ram = self.nes_palette_ram[:16]
+            palette_ram = self._normalize_bg_palette_ram(self.nes_palette_ram[:16])
         else:
             palette_ram = self.nes_palette_ram[16:32]
 
@@ -151,7 +180,7 @@ class PaletteMapper:
                     if d < best_dist:
                         best_dist = d
                         best = j
-                cm[c] = best
+                cm[c] = 0 if c == 0 else best
             color_maps.append(cm)
 
         return bytes(sms_palette), color_maps

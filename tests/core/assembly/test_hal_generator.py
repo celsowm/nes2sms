@@ -1,6 +1,9 @@
 """Tests for HAL generation regressions."""
 
+import re
+
 from nes2sms.core.sms.hal_generator import HALGenerator
+from nes2sms.core.graphics.palette_mapper import PaletteMapper
 
 
 class TestHalGenerator:
@@ -156,3 +159,15 @@ class TestHalGenerator:
     def test_input_hal_maps_select_from_dual_buttons(self):
         input_code = HALGenerator().generate_input_routines()
         assert "set  2, a                    ; Select = BTN1+BTN2" in input_code
+
+    def test_palette_lookup_matches_palette_mapper(self):
+        ppu_code = HALGenerator().generate_ppu_routines()
+        match = re.search(r"_nes_to_sms_color:\n(?:\s*;.*\n)?((?:\s*\.db .*?\n){4})", ppu_code)
+        assert match is not None
+
+        values = []
+        for row in match.group(1).strip().splitlines():
+            payload = row.split(";")[0].replace(".db", "").strip()
+            values.extend(int(part.strip().replace("$", "0x"), 16) for part in payload.split(","))
+
+        assert values == PaletteMapper.build_nes_to_sms_lookup()

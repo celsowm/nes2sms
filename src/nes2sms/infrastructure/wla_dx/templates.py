@@ -240,6 +240,14 @@ VDP_Init:
     ld   a, 2
     ld   b, %11101110
     call VDP_WriteReg
+    ; Register 3: Unused in Mode 4, keep canonical value
+    ld   a, 3
+    ld   b, $FF
+    call VDP_WriteReg
+    ; Register 4: Unused in Mode 4, keep canonical value
+    ld   a, 4
+    ld   b, $FF
+    call VDP_WriteReg
     ; Register 5: Sprite Attribute Table Base ($3F00)
     ld   a, 5
     ld   b, $7E
@@ -247,6 +255,22 @@ VDP_Init:
     ; Register 6: Sprite tile base (first 256 tiles)
     ld   a, 6
     ld   b, $00
+    call VDP_WriteReg
+    ; Register 7: Backdrop color uses BG palette slot 0
+    ld   a, 7
+    ld   b, $00
+    call VDP_WriteReg
+    ; Register 8: X scroll
+    ld   a, 8
+    ld   b, $00
+    call VDP_WriteReg
+    ; Register 9: Y scroll
+    ld   a, 9
+    ld   b, $00
+    call VDP_WriteReg
+    ; Register 10: line counter disabled
+    ld   a, 10
+    ld   b, $FF
     call VDP_WriteReg
     ret
 

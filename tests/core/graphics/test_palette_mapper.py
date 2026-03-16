@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from nes2sms.core.graphics.palette_mapper import PaletteMapper
+from nes2sms.shared.constants import NES_PALETTE_RGB
 
 
 class TestPaletteMapper:
@@ -22,6 +23,12 @@ class TestPaletteMapper:
         # Test white (approximate, NES color $30)
         sms_white = PaletteMapper.nes_color_to_sms(0x30)
         assert isinstance(sms_white, int)
+
+    def test_reference_palette_matches_fceux_for_known_entries(self):
+        assert NES_PALETTE_RGB[0x0C] == (24, 60, 92)
+        assert NES_PALETTE_RGB[0x1C] == (0, 128, 136)
+        assert NES_PALETTE_RGB[0x2B] == (88, 248, 152)
+        assert NES_PALETTE_RGB[0x39] == (224, 252, 160)
 
     def test_sms_color_to_rgb(self):
         """Test SMS color to RGB conversion."""
@@ -96,3 +103,41 @@ class TestPaletteMapper:
         # Different colors should have positive distance
         dist = mapper._rgb_distance((0, 0, 0), (255, 255, 255))
         assert dist > 0
+
+    def test_bg_palette_uses_universal_backdrop_for_all_subpalettes(self):
+        mapper = PaletteMapper(
+            nes_palette_ram=[
+                0x0C,
+                0x0C,
+                0x1C,
+                0x39,
+                0x0F,
+                0x1C,
+                0x2B,
+                0x39,
+                0x0C,
+                0x0F,
+                0x0F,
+                0x0F,
+                0x0C,
+                0x0F,
+                0x0F,
+                0x0F,
+            ]
+            + [0x0F] * 16
+        )
+
+        palette, color_maps = mapper.build_sms_palette("bg")
+        backdrop = PaletteMapper.nes_color_to_sms(0x0C)
+
+        assert palette[0] == backdrop
+        assert palette[4] == backdrop
+        assert palette[8] == backdrop
+        assert palette[12] == backdrop
+        assert all(cm[0] == 0 for cm in color_maps)
+
+    def test_lookup_table_matches_pointwise_conversion(self):
+        lookup = PaletteMapper.build_nes_to_sms_lookup()
+
+        assert len(lookup) == 64
+        assert lookup == [PaletteMapper.nes_color_to_sms(index) for index in range(64)]

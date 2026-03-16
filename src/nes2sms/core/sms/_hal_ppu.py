@@ -1,8 +1,11 @@
 """PPU HAL section generator."""
 
+from ..graphics.palette_mapper import PaletteMapper
+
 
 def generate_ppu_routines() -> str:
-    return """
+    palette_lookup_asm = PaletteMapper.build_nes_to_sms_lookup_asm()
+    return f"""
 .export hal_ppu_write
 .export hal_ppu_read
 
@@ -558,8 +561,5 @@ _ppu_set_vdp_increment:
 ; NES palette index (0-63) -> SMS color (--BBGGRR)
 _nes_to_sms_color:
     ;      0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
-    .db $15, $02, $06, $0A, $09, $08, $08, $04, $14, $10, $10, $11, $15, $00, $00, $00  ; $00-$0F
-    .db $3F, $07, $0B, $2E, $2D, $0D, $1C, $2C, $28, $24, $20, $21, $25, $00, $00, $00  ; $10-$1F
-    .db $3F, $0B, $0F, $2F, $2F, $1F, $3D, $3D, $3C, $38, $34, $35, $3A, $15, $00, $00  ; $20-$2F
-    .db $3F, $2F, $2F, $3F, $3F, $2B, $3F, $3F, $3E, $3D, $39, $3A, $3F, $2A, $00, $00  ; $30-$3F
+{palette_lookup_asm}
 """

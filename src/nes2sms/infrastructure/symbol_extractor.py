@@ -412,8 +412,8 @@ class StaticSymbolExtractor:
                     "bank": s.bank,
                     "type": s.type,
                     "comment": s.comment or "",
-                    "disassembly_snippet": s.disassembly_snippet or "",
-                    "is_embedded": s.is_embedded,
+                    "disassembly_snippet": getattr(s, "disassembly_snippet", "") or "",
+                    "is_embedded": bool(getattr(s, "is_embedded", False)),
                 }
                 for s in self.symbols
             ],
