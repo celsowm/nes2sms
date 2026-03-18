@@ -16,6 +16,8 @@ local addr_hi = 0
 local addr_lo = 0
 local addr_toggle = 0
 local current_addr = 0
+local ppudata_write_count = 0
+local ppudata_nt_writes = 0
 
 for i = 0, 0x0FFF do
     ppu_vram[i] = 0
@@ -73,6 +75,63 @@ local function on_ppuaddr(addr, size, value)
     end
 end
 
+local function on_ppustatus(addr, size, value)
+    -- Reading $2002 resets the address latch toggle
+    addr_toggle = 0
+    scroll_toggle = 0
+end
+
+local function advance_ppu_addr()
+    -- PPUCTRL bit 2: 0 = increment 1, 1 = increment 32
+    local inc = 1
+    if (ppuctrl % 8) >= 4 then
+        inc = 32
+    end
+    current_addr = (current_addr + inc) % 0x4000
+end
+
+local function on_ppudata_exec()
+    -- Fired when CPU executes STA/STX/STY $2007.
+    -- At this point the A/X/Y register still holds the value to be stored.
+    ppudata_write_count = ppudata_write_count + 1
+
+    -- Read the opcode at PC to determine which register is being stored
+    local pc = memory.getregister("pc")
+    local opcode = memory.readbyte(pc)
+    local value
+    if opcode == 0x8D then
+        value = memory.getregister("a")
+    elseif opcode == 0x8E then
+        value = memory.getregister("x")
+    elseif opcode == 0x8C then
+        value = memory.getregister("y")
+    else
+        value = memory.getregister("a")
+    end
+    if value == nil then value = 0 end
+
+    local ppu_addr = current_addr % 0x4000
+
+    if ppu_addr >= 0x3F00 then
+        -- Palette write
+        local _, pal_idx = normalize_ppu_addr(ppu_addr)
+        if pal_idx ~= nil then
+            palette_ram[pal_idx] = value % 64
+        end
+    elseif ppu_addr >= 0x2000 and ppu_addr < 0x3000 then
+        -- Nametable write (including attribute tables)
+        local offset = ppu_addr - 0x2000
+        ppu_vram[offset] = value % 256
+        ppudata_nt_writes = ppudata_nt_writes + 1
+    elseif ppu_addr >= 0x3000 and ppu_addr < 0x3F00 then
+        -- Nametable mirror ($3000-$3EFF mirrors $2000-$2EFF)
+        local offset = (ppu_addr - 0x1000) - 0x2000
+        ppu_vram[offset] = value % 256
+    end
+
+    advance_ppu_addr()
+end
+
 local function on_oam_dma(addr, size, value)
     local base = (value % 256) * 256
     for i = 0, 255 do
@@ -81,14 +140,15 @@ local function on_oam_dma(addr, size, value)
 end
 
 local function refresh_ppu_snapshot()
-    for i = 0, 0x0FFF do
-        ppu_vram[i] = ppu.readbyte(0x2000 + i)
-    end
-
+    -- Nametable data is already captured via $2007 write interception.
+    -- Only refresh palette from ppu.readbyte (which works for $3F00+).
     for i = 0, 31 do
         local normalized, palette_index = normalize_ppu_addr(0x3F00 + i)
         if palette_index ~= nil then
-            palette_ram[palette_index] = ppu.readbyte(normalized) % 64
+            local ppu_val = ppu.readbyte(normalized)
+            if ppu_val ~= 0 then
+                palette_ram[palette_index] = ppu_val % 64
+            end
         end
     end
 end
@@ -108,6 +168,8 @@ local function dump_capture(frame_value)
     local out_file = assert(io.open(OUTPUT_PATH, "w"))
     out_file:write("{\n")
     out_file:write('  "source": "fceux_lua",\n')
+    out_file:write('  "_debug_ppudata_writes": ' .. tostring(ppudata_write_count) .. ',\n')
+    out_file:write('  "_debug_ppudata_nt_writes": ' .. tostring(ppudata_nt_writes) .. ',\n')
     out_file:write('  "frame": ' .. tostring(frame_value) .. ",\n")
     out_file:write('  "scroll_x": ' .. tostring(scroll_x) .. ",\n")
     out_file:write('  "scroll_y": ' .. tostring(scroll_y) .. ",\n")
@@ -125,12 +187,30 @@ local function dump_capture(frame_value)
 end
 
 memory.registerwrite(0x2000, 1, on_ppuctrl)
+memory.registerread(0x2002, 1, on_ppustatus)
 memory.registerwrite(0x2005, 1, on_ppuscroll)
 memory.registerwrite(0x2006, 1, on_ppuaddr)
 memory.registerwrite(0x4014, 1, on_oam_dma)
 
 FCEU.speedmode("maximum")
 FCEU.poweron()
+FCEU.frameadvance() -- Ensure memory is fully initialized
+
+-- Scan ROM for all STA/STX/STY $2007 instructions and register exec hooks.
+-- memory.registerwrite(0x2007) passes stale values for PPU data port writes.
+local ppudata_hook_count = 0
+for scan_addr = 0x8000, 0xFFFD do
+    local opcode = memory.readbyte(scan_addr)
+    -- STA abs = 0x8D, STX abs = 0x8E, STY abs = 0x8C (all 3-byte instructions)
+    if opcode == 0x8D or opcode == 0x8E or opcode == 0x8C then
+        local lo = memory.readbyte(scan_addr + 1)
+        local hi = memory.readbyte(scan_addr + 2)
+        if lo == 0x07 and hi == 0x20 then
+            memory.registerexec(scan_addr, on_ppudata_exec)
+            ppudata_hook_count = ppudata_hook_count + 1
+        end
+    end
+end
 
 local frame_counter = 0
 while frame_counter < CAPTURE_FRAME do

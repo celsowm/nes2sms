@@ -115,7 +115,10 @@ def extract_visible_tile_and_palette_grids(
             nt_index = (nt_y * 2) + nt_x
             local_col = virtual_col % 32
             local_row = virtual_row % 30
-            tile_row.append(_read_nametable_tile(capture, nt_index, local_row, local_col))
+            tile_val = _read_nametable_tile(capture, nt_index, local_row, local_col)
+            if capture.ppuctrl & 0x10:
+                tile_val += 256
+            tile_row.append(tile_val)
             palette_row.append(_read_attribute_palette(capture, nt_index, local_row, local_col))
         tile_grid.append(tile_row)
         palette_grid.append(palette_row)

@@ -273,7 +273,7 @@ VDP_Init:
     call VDP_WriteReg
     ; Register 9: Y scroll
     ld   a, 9
-    ld   b, $00
+    ld   b, 24
     call VDP_WriteReg
     ; Register 10: line counter disabled
     ld   a, 10

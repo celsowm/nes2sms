@@ -18,14 +18,12 @@ def build_blank_tilemap(
     rows: int = VISIBLE_ROWS,
     cols: int = VISIBLE_COLS,
 ) -> bytes:
-    """Build a blank SMS tilemap with the legacy split priority policy."""
+    """Build a blank SMS tilemap with the legacy split priority policy removed."""
     data = bytearray()
-    split_tile = max(0, min(rows - 1, split_tile))
     for row in range(rows):
-        attr = 0x10 if row >= split_tile else 0x00
         for _ in range(cols):
             data.append(blank_tile_index & 0xFF)
-            data.append(attr)
+            data.append(0x00)
     return bytes(data)
 
 
@@ -37,11 +35,9 @@ def build_blank_sat() -> Tuple[bytes, bytes]:
 def build_sms_tilemap_bytes(tile_grid: Sequence[Sequence[int]], *, split_tile: int = 6) -> bytes:
     """Encode a visible SMS tilemap from tile indices using the repo's attr convention."""
     data = bytearray()
-    rows = len(tile_grid)
-    split_tile = max(0, min(max(rows - 1, 0), split_tile))
     for row_index, row in enumerate(tile_grid):
-        attr = 0x10 if row_index >= split_tile else 0x00
         for tile in row:
+            attr = (int(tile) >> 8) & 0x01
             data.append(int(tile) & 0xFF)
             data.append(attr)
     return bytes(data)
@@ -78,7 +74,7 @@ def build_runtime_background_assets(
 
     tiles = tile_result.sms_tiles
     metadata = tile_result.tile_metadata
-    max_tile_index = min(255, len(tiles) - 1, (len(chr_data) // 16) - 1)
+    max_tile_index = min(511, len(tiles) - 1, (len(chr_data) // 16) - 1)
     used_base_tiles = {
         tile
         for row in tile_grid

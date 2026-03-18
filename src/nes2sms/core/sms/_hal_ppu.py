@@ -70,6 +70,7 @@ _ppu_2005_y:
     ; Second write: Y scroll
     ld   a, b
     ld   (_ppu_scroll_y), a
+    add  a, 24
     ld   b, a
     ld   a, 9
     call VDP_WriteReg
@@ -123,6 +124,7 @@ _ppu_2006_nametable:
     ; Nametable range $20xx-$2Fxx -> SMS $3800 + offset
     ; NES addr = ($2000 + offset), SMS addr = ($3800 + offset*2)
     ; For simplicity, set VDP address for nametable writes
+    ld   a, (_ppu_addr_hi)
     sub  $20
     ld   d, a
     ld   a, (_ppu_addr_lo)
@@ -510,6 +512,16 @@ _ppu_addr_inc1:
 
 _ppu_attr_write_2x2:
     ; A = attribute byte to write (bit3 palette select)
+    ; Check if BG uses Pattern Table 1 (PPUCTRL bit 4)
+    push af
+    ld   a, (_ppu_ctrl_shadow)
+    and  $10
+    jr   z, _ppu_attr_no_t1
+    pop  af
+    or   $01
+    push af
+_ppu_attr_no_t1:
+    pop  af
     ; DE = top-left attribute byte address for 2x2 tiles
     ld   b, a
     ld   a, b
