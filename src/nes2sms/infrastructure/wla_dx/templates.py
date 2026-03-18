@@ -86,6 +86,13 @@ _input_latch_p2:   db
 _input_start_p1_pending: db
 _oam_prio_top:     db
 _oam_prio_bottom:  db
+_apu_pulse1_vol:   db
+_apu_pulse1_per_lo: db
+_apu_pulse2_vol:   db
+_apu_pulse2_per_lo: db
+_apu_tri_linear:   db
+_apu_tri_per_lo:   db
+_apu_noise_vol:    db
 .ENDE
 """
 

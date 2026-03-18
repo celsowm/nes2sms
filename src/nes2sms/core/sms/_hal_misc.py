@@ -27,6 +27,14 @@ HAL_StateInit:
     ld   (_input_start_p1_pending), a
     ld   (_oam_prio_top), a
     ld   (_oam_prio_bottom), a
+    ; Audio variables
+    ld   (_apu_pulse1_vol), a
+    ld   (_apu_pulse1_per_lo), a
+    ld   (_apu_pulse2_vol), a
+    ld   (_apu_pulse2_per_lo), a
+    ld   (_apu_tri_linear), a
+    ld   (_apu_tri_per_lo), a
+    ld   (_apu_noise_vol), a
     ; Non-zero defaults
     ld   a, %11100000
     ld   (_vdp_reg1_shadow), a
@@ -42,8 +50,326 @@ def generate_apu_routines() -> str:
 .export hal_apu_read
 
 hal_apu_write:
-    ; NES APU -> SMS PSG ($7F)
-    out ($7f), a
+    ; A = value to write, L = register offset ($00-$15 from base $4000)
+    ; We save all registers since this is an interceptor
+    push af
+    push bc
+    push de
+    push hl
+    
+    ld   a, l
+    cp   $10
+    jr   nc, .not_channel_reg
+    
+    ; Calculate jump table offset
+    add  a, a         ; A * 2
+    ld   e, a
+    ld   d, 0
+    ld   hl, apu_handlers
+    add  hl, de
+    
+    ; Get value back
+    pop  de       ; we pushed DE originally, but we want the pushed HL which has L=offset
+    pop  de       ; skip old DE
+    pop  bc       ; skip old BC
+    pop  af       ; now A has value
+    
+    ; Setup stack for jump
+    push af
+    push bc
+    push de
+    push de       ; extra push to restore stack balance after jump if needed. Actually let's do clean restore:
+    
+    ; Simpler way:
+    ld   e, (hl)
+    inc  hl
+    ld   d, (hl)
+    
+    ; restore A
+    pop  hl       ; throw away
+    pop  hl
+    pop  bc
+    pop  af
+    
+    ; Call handler via DE
+    push hl
+    push bc
+    push de
+    ld   h, d
+    ld   l, e
+    
+    ; jump to handler. Handler will return.
+    call __call_hl
+    
+    pop  de
+    pop  bc
+    pop  hl
+    ret
+
+.not_channel_reg:
+    ; Not $4000-$400F (Channels). Could be $4015 (Status)
+    pop  hl
+    pop  de
+    pop  bc
+    pop  af
+    ret
+
+__call_hl:
+    jp   (hl)
+
+apu_handlers:
+    .dw apu_pulse1_0, apu_pulse1_1, apu_pulse1_2, apu_pulse1_3
+    .dw apu_pulse2_0, apu_pulse2_1, apu_pulse2_2, apu_pulse2_3
+    .dw apu_triangle_0, apu_triangle_1, apu_triangle_2, apu_triangle_3
+    .dw apu_noise_0, apu_noise_1, apu_noise_2, apu_noise_3
+
+; ---------------------------------
+; Pulse 1 ($4000 - $4003) -> Tone 1
+; ---------------------------------
+apu_pulse1_0:
+    ; $4000: --lc vvvv (l=loop env, c=const vol, v=vol/env)
+    ; In basic mapping we treat as const vol
+    and  $0F
+    ld   (_apu_pulse1_vol), a
+    ; convert to attenuation (15 - vol)
+    ld   b, a
+    ld   a, 15
+    sub  b
+    ; tone1 atten command: 1001 0000 | atten
+    or   %10010000
+    out  ($7f), a
+    ret
+
+apu_pulse1_1:
+    ; Sweep - ignore for now
+    ret
+
+apu_pulse1_2:
+    ; Timer low 8 bits
+    ld   (_apu_pulse1_per_lo), a
+    ret
+
+apu_pulse1_3:
+    ; Timer high 3 bits + Length counter load
+    ; A has high 3 bits in D2-D0 (we ignore length counter for basic pitch)
+    and  $07
+    ld   h, a
+    ld   a, (_apu_pulse1_per_lo)
+    ld   l, a
+    ; HL = NES Period
+    
+    ; SMS_Period = NES_Period + 1
+    inc  hl
+    
+    ; Write Tone 1 (1000 0000)
+    ; Low byte: 1000 | (period & 0xF)
+    ld   a, l
+    and  $0F
+    or   %10000000
+    out  ($7f), a
+    
+    ; High byte: (period >> 4) & 0x3F
+    ; We need to shift HL right 4 times
+    ld   a, h
+    rrca
+    rrca
+    rrca
+    rrca
+    and  $30
+    ld   b, a
+    
+    ld   a, l
+    rlca
+    rlca
+    rlca
+    rlca
+    and  $0F
+    or   b
+    out  ($7f), a
+    ret
+
+; ---------------------------------
+; Pulse 2 ($4004 - $4007) -> Tone 2
+; ---------------------------------
+apu_pulse2_0:
+    ; Same logic as Tone 1
+    and  $0F
+    ld   (_apu_pulse2_vol), a
+    ld   b, a
+    ld   a, 15
+    sub  b
+    ; tone2 atten command: 1011 0000 | atten
+    or   %10110000
+    out  ($7f), a
+    ret
+
+apu_pulse2_1:
+    ret
+
+apu_pulse2_2:
+    ld   (_apu_pulse2_per_lo), a
+    ret
+
+apu_pulse2_3:
+    and  $07
+    ld   h, a
+    ld   a, (_apu_pulse2_per_lo)
+    ld   l, a
+    
+    inc  hl
+    
+    ; Write Tone 2 (1010 0000)
+    ld   a, l
+    and  $0F
+    or   %10100000
+    out  ($7f), a
+    
+    ld   a, h
+    rrca
+    rrca
+    rrca
+    rrca
+    and  $30
+    ld   b, a
+    
+    ld   a, l
+    rlca
+    rlca
+    rlca
+    rlca
+    and  $0F
+    or   b
+    out  ($7f), a
+    ret
+
+; -----------------------------------
+; Triangle ($4008 - $400B) -> Tone 3
+; -----------------------------------
+apu_triangle_0:
+    ; Linear counter - affects on/off
+    ; Non zero linear counter turns on (attenuation 0)
+    ld   (_apu_tri_linear), a
+    and  $7f  ; ignore control flag for now
+    jr   z, .tri_off
+    ld   a, %11010000   ; Tone 3 Vol = 0 (loudest)
+    out  ($7f), a
+    ret
+.tri_off:
+    ld   a, %11011111   ; Tone 3 Vol = 15 (silent)
+    out  ($7f), a
+    ret
+
+apu_triangle_1:
+    ret
+
+apu_triangle_2:
+    ld   (_apu_tri_per_lo), a
+    ret
+
+apu_triangle_3:
+    and  $07
+    ld   h, a
+    ld   a, (_apu_tri_per_lo)
+    ld   l, a
+    
+    ; SMS_Period = (NES_Period + 1) * 2
+    inc  hl
+    add  hl, hl
+    
+    ; Write Tone 3 (1100 0000)
+    ld   a, l
+    and  $0F
+    or   %11000000
+    out  ($7f), a
+    
+    ld   a, h
+    rrca
+    rrca
+    rrca
+    rrca
+    and  $30
+    ld   b, a
+    
+    ld   a, l
+    rlca
+    rlca
+    rlca
+    rlca
+    and  $0F
+    or   b
+    out  ($7f), a
+    ret
+
+; -----------------------------------
+; Noise ($400C - $400F) -> Noise Ch
+; -----------------------------------
+apu_noise_0:
+    and  $0F
+    ld   (_apu_noise_vol), a
+    ld   b, a
+    ld   a, 15
+    sub  b
+    ; noise atten command: 1111 0000 | atten
+    or   %11110000
+    out  ($7f), a
+    ret
+
+apu_noise_1:
+    ret
+
+apu_noise_2:
+    ; Period setup (and mode)
+    ; Mode bit 7: 1 = short noise (metallic), 0 = long noise (white)
+    ; SMS has White Noise and Periodic Noise.
+    ; bit 7: 1 -> Periodic (SMS bit = 0)
+    ; bit 7: 0 -> White (SMS bit = 1)
+    
+    ld   b, a
+    and  $80
+    rlca
+    rlca
+    ; now bit 1 is Mode flag (1 = short, 0 = long)
+    ; in SMS: 00b0 (b=1 is white, b=0 is periodic)
+    ; Let's build SMS data %111000fb
+    ; For SMS b=0 means periodic, so flag in B=1 means periodic, meaning sms b=0
+    ; Let's just simply check
+    ld   a, b
+    and  $80
+    jr   nz, .metallic
+    ; white noise
+    ld   c, 4  ; %00000100 (b=1)
+    jr   .pitch
+.metallic:
+    ld   c, 0  ; %00000000 (b=0)
+.pitch:
+    ; map Pitch
+    ; D3-D0 of NES noise period goes 0..15
+    ; SMS has only 3 shift rates (0=high, 1=medium, 2=low) + tone3 linked
+    ; Let's map roughly: < 4 -> high, < 8 -> med, else -> low
+    ld   a, b
+    and  $0F
+    cp   4
+    jr   c, .high
+    cp   8
+    jr   c, .med
+    ; low
+    ld   a, c
+    or   2
+    jr   .send
+.high:
+    ld   a, c
+    or   0
+    jr   .send
+.med:
+    ld   a, c
+    or   1
+.send:
+    ; send to SMS. Command: 1110 0000 | a
+    or   %11100000
+    out  ($7f), a
+    ret
+
+apu_noise_3:
     ret
 
 hal_apu_read:
