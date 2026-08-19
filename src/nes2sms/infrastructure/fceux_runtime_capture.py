@@ -10,10 +10,8 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from ..core.graphics.runtime_capture import RuntimeGraphicsCapture
-
 
 WM_COMMAND = 0x0111
 WM_SETTEXT = 0x000C
@@ -29,7 +27,11 @@ LUA_SUBMENU_INDEX = 7
 NEW_LUA_WINDOW_INDEX = 1
 
 
-user32 = ctypes.windll.user32 if platform.system() == "Windows" and hasattr(ctypes, "windll") else None
+user32 = (
+    ctypes.windll.user32
+    if platform.system() == "Windows" and hasattr(ctypes, "windll")
+    else None
+)
 
 
 @dataclass
@@ -41,7 +43,7 @@ class FceuxRuntimeCaptureConfig:
     mirroring: str
     capture_frame: int = 120
     timeout_seconds: int = 30
-    emulator_path: Optional[str] = None
+    emulator_path: str | None = None
 
 
 def capture_runtime_graphics(config: FceuxRuntimeCaptureConfig) -> RuntimeGraphicsCapture:
@@ -70,7 +72,7 @@ def capture_runtime_graphics(config: FceuxRuntimeCaptureConfig) -> RuntimeGraphi
         script_edit = _find_dialog_control(lua_window, SCRIPT_PATH_EDIT_ID)
         run_button = _find_dialog_control(lua_window, RUN_BUTTON_ID)
         _set_window_text(script_edit, str(script_path))
-        user32.SendMessageW(run_button, BM_CLICK, 0, 0)
+        _user32().SendMessageW(run_button, BM_CLICK, 0, 0)
         _wait_for_capture_file(capture_path, lua_window, config.timeout_seconds)
     finally:
         _terminate_process_tree(proc)
@@ -91,7 +93,7 @@ def _build_lua_script(output_path: Path, capture_frame: int, mirroring: str) -> 
     )
 
 
-def _resolve_fceux_path(explicit_path: Optional[str]) -> Path:
+def _resolve_fceux_path(explicit_path: str | None) -> Path:
     if explicit_path:
         path = Path(explicit_path)
         if not path.exists():
@@ -115,9 +117,17 @@ def _resolve_fceux_path(explicit_path: Optional[str]) -> Path:
     raise FileNotFoundError("FCEUX not found. Install FCEUX or pass --emulator /path/to/fceux.")
 
 
-def _ensure_windows_capture_support() -> None:
+def _user32() -> ctypes.WinDLL:
+    """Return the Win32 user32 library, raising if unavailable on this platform."""
     if user32 is None:
-        raise RuntimeError("Runtime graphics capture currently requires Windows + Win32 user32 access.")
+        raise RuntimeError(
+            "Runtime graphics capture currently requires Windows + Win32 user32 access."
+        )
+    return user32
+
+
+def _ensure_windows_capture_support() -> None:
+    _user32()
 
 
 def _terminate_process_tree(proc: subprocess.Popen) -> None:
@@ -159,11 +169,11 @@ def _wait_for_window_title(process_id: int, title: str, timeout_seconds: int) ->
 
 
 def _open_lua_dialog(main_window: int) -> None:
-    menu = user32.GetMenu(main_window)
-    file_menu = user32.GetSubMenu(menu, FILE_MENU_INDEX)
-    lua_menu = user32.GetSubMenu(file_menu, LUA_SUBMENU_INDEX)
-    command_id = user32.GetMenuItemID(lua_menu, NEW_LUA_WINDOW_INDEX)
-    user32.PostMessageW(main_window, WM_COMMAND, command_id, 0)
+    menu = _user32().GetMenu(main_window)
+    file_menu = _user32().GetSubMenu(menu, FILE_MENU_INDEX)
+    lua_menu = _user32().GetSubMenu(file_menu, LUA_SUBMENU_INDEX)
+    command_id = _user32().GetMenuItemID(lua_menu, NEW_LUA_WINDOW_INDEX)
+    _user32().PostMessageW(main_window, WM_COMMAND, command_id, 0)
 
 
 def _wait_for_capture_file(capture_path: Path, lua_window: int, timeout_seconds: int) -> None:
@@ -178,7 +188,7 @@ def _wait_for_capture_file(capture_path: Path, lua_window: int, timeout_seconds:
 
 
 def _set_window_text(window_handle: int, text: str) -> None:
-    user32.SendMessageW(window_handle, WM_SETTEXT, 0, ctypes.c_wchar_p(text))
+    _user32().SendMessageW(window_handle, WM_SETTEXT, 0, ctypes.c_wchar_p(text))
 
 
 def _find_dialog_control(parent_handle: int, control_id: int) -> int:
@@ -186,38 +196,38 @@ def _find_dialog_control(parent_handle: int, control_id: int) -> int:
 
     @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
     def callback(hwnd, _lparam):
-        if user32.GetDlgCtrlID(hwnd) == control_id:
+        if _user32().GetDlgCtrlID(hwnd) == control_id:
             handles.append(hwnd)
             return False
         return True
 
-    user32.EnumChildWindows(parent_handle, callback, 0)
+    _user32().EnumChildWindows(parent_handle, callback, 0)
     if not handles:
         raise RuntimeError(f"FCEUX Lua dialog control id {control_id} not found.")
     return handles[0]
 
 
-def _find_visible_window(process_id: int, title: Optional[str] = None) -> int:
+def _find_visible_window(process_id: int, title: str | None = None) -> int:
     handles: list[int] = []
 
     @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
     def callback(hwnd, _lparam):
         target_pid = ctypes.c_uint()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(target_pid))
-        if target_pid.value != process_id or not user32.IsWindowVisible(hwnd):
+        _user32().GetWindowThreadProcessId(hwnd, ctypes.byref(target_pid))
+        if target_pid.value != process_id or not _user32().IsWindowVisible(hwnd):
             return True
         if title is not None and _get_window_text(hwnd) != title:
             return True
         handles.append(hwnd)
         return False
 
-    user32.EnumWindows(callback, 0)
+    _user32().EnumWindows(callback, 0)
     return handles[0] if handles else 0
 
 
 def _get_window_text(hwnd: int) -> str:
     buffer = ctypes.create_unicode_buffer(512)
-    user32.GetWindowTextW(hwnd, buffer, len(buffer))
+    _user32().GetWindowTextW(hwnd, buffer, len(buffer))
     return buffer.value
 
 
@@ -227,5 +237,5 @@ def _read_lua_output(lua_window: int) -> str:
     except RuntimeError:
         return ""
     buffer = ctypes.create_unicode_buffer(8192)
-    user32.GetWindowTextW(output_handle, buffer, len(buffer))
+    _user32().GetWindowTextW(output_handle, buffer, len(buffer))
     return buffer.value.strip()

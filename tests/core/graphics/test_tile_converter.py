@@ -1,13 +1,5 @@
 """Tests for tile converter."""
 
-import pytest
-from pathlib import Path
-import sys
-
-# Add src to path for imports
-src_path = Path(__file__).parent.parent.parent / "src"
-sys.path.insert(0, str(src_path))
-
 from nes2sms.core.graphics.tile_converter import TileConverter
 
 

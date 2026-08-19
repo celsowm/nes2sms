@@ -1,14 +1,24 @@
 """SMS asset builders derived from runtime NES graphics snapshots."""
 
-from typing import Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from .runtime_capture import (
-    RuntimeGraphicsCapture,
     VISIBLE_COLS,
     VISIBLE_ROWS,
+    RuntimeGraphicsCapture,
     extract_visible_tile_and_palette_grids,
 )
 from .tile_converter import TileConverter
+
+
+@dataclass
+class RuntimeBackgroundAssets:
+    """Background assets derived from a runtime NES graphics snapshot."""
+
+    tilemap: bytes
+    warnings: list[str]
+    variant_lookup: dict[tuple[int, int], int]
 
 
 def build_blank_tilemap(
@@ -20,14 +30,14 @@ def build_blank_tilemap(
 ) -> bytes:
     """Build a blank SMS tilemap with the legacy split priority policy removed."""
     data = bytearray()
-    for row in range(rows):
+    for _ in range(rows):
         for _ in range(cols):
             data.append(blank_tile_index & 0xFF)
             data.append(0x00)
     return bytes(data)
 
 
-def build_blank_sat() -> Tuple[bytes, bytes]:
+def build_blank_sat() -> tuple[bytes, bytes]:
     """Build a neutral SAT payload that hides all sprites."""
     return bytes([0xD0]), bytes([0x00, 0x00])
 
@@ -35,7 +45,7 @@ def build_blank_sat() -> Tuple[bytes, bytes]:
 def build_sms_tilemap_bytes(tile_grid: Sequence[Sequence[int]], *, split_tile: int = 6) -> bytes:
     """Encode a visible SMS tilemap from tile indices using the repo's attr convention."""
     data = bytearray()
-    for row_index, row in enumerate(tile_grid):
+    for row in tile_grid:
         for tile in row:
             attr = (int(tile) >> 8) & 0x01
             data.append(int(tile) & 0xFF)
@@ -48,11 +58,11 @@ def build_runtime_background_assets(
     *,
     chr_data: bytes,
     tile_result,
-    color_maps: List[List[int]],
+    color_maps: list[list[int]],
     split_tile: int = 6,
     rows: int = VISIBLE_ROWS,
     cols: int = VISIBLE_COLS,
-) -> Dict[str, object]:
+) -> RuntimeBackgroundAssets:
     """
     Materialize palette-specific background tile variants and a visible SMS tilemap.
 
@@ -60,9 +70,11 @@ def build_runtime_background_assets(
     by the current SMS HAL. When no spare blank tile is available, the base tile is kept.
     """
 
-    warnings: List[str] = []
+    warnings: list[str] = []
     if not chr_data or not tile_result.sms_tiles:
-        return {"tilemap": build_blank_tilemap(split_tile=split_tile), "warnings": warnings}
+        return RuntimeBackgroundAssets(
+            build_blank_tilemap(split_tile=split_tile), warnings, {}
+        )
 
     tile_grid, palette_grid = extract_visible_tile_and_palette_grids(
         capture,
@@ -87,10 +99,10 @@ def build_runtime_background_assets(
         if idx not in used_base_tiles and not any(tiles[idx])
     ]
 
-    variant_lookup: Dict[Tuple[int, int], int] = {}
-    mapped_grid: List[List[int]] = []
+    variant_lookup: dict[tuple[int, int], int] = {}
+    mapped_grid: list[list[int]] = []
     for row_index in range(rows):
-        mapped_row: List[int] = []
+        mapped_row: list[int] = []
         for col_index in range(cols):
             tile = tile_grid[row_index][col_index]
             palette = palette_grid[row_index][col_index]
@@ -118,7 +130,8 @@ def build_runtime_background_assets(
             if mapped_idx is None:
                 if not free_slots:
                     warnings.append(
-                        f"No blank tile slots left for BG tile={tile} palette={palette}; using base tile."
+                        f"No blank tile slots left for BG tile={tile} "
+                        f"palette={palette}; using base tile."
                     )
                     mapped_idx = tile
                 else:
@@ -143,11 +156,11 @@ def build_runtime_background_assets(
             mapped_row.append(mapped_idx)
         mapped_grid.append(mapped_row)
 
-    return {
-        "tilemap": build_sms_tilemap_bytes(mapped_grid, split_tile=split_tile),
-        "warnings": warnings,
-        "variant_lookup": variant_lookup,
-    }
+    return RuntimeBackgroundAssets(
+        tilemap=build_sms_tilemap_bytes(mapped_grid, split_tile=split_tile),
+        warnings=warnings,
+        variant_lookup=variant_lookup,
+    )
 
 
 def _find_tile_index_within(tiles: Sequence[bytes], candidate: bytes, max_index: int) -> int | None:

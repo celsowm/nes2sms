@@ -1,7 +1,7 @@
 """Tests for FCEUX screenshot decoding helpers."""
 
-from pathlib import Path
 import struct
+from pathlib import Path
 
 from nes2sms.infrastructure.fceux_screenshot_capture import gd_screenshot_to_rgba, write_rgba_png
 

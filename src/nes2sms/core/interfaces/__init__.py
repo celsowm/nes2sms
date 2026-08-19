@@ -1,8 +1,8 @@
 """Core interfaces for SOLID architecture."""
 
-from .i_disassembler import IDisassembler, DisassemblyResult
+from .i_control_flow_analyzer import BasicBlock, ControlFlowGraph, IControlFlowAnalyzer
+from .i_disassembler import DisassemblyResult, IDisassembler
 from .i_translator import ITranslator
-from .i_control_flow_analyzer import IControlFlowAnalyzer, ControlFlowGraph, BasicBlock
 
 __all__ = [
     "IDisassembler",

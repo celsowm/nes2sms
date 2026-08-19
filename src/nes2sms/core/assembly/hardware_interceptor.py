@@ -1,7 +1,6 @@
 """Hardware interception logic for redirecting NES memory-mapped I/O to SMS HAL."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
 
 
 class IHardwareInterceptor(ABC):
@@ -13,12 +12,12 @@ class IHardwareInterceptor(ABC):
         pass
 
     @abstractmethod
-    def intercept_write(self, address: int, value_source: str) -> List[str]:
+    def intercept_write(self, address: int, value_source: str) -> list[str]:
         """Generate Z80 code for a write to this hardware register."""
         pass
 
     @abstractmethod
-    def intercept_read(self, address: int, target_reg: str) -> List[str]:
+    def intercept_read(self, address: int, target_reg: str) -> list[str]:
         """Generate Z80 code for a read from this hardware register."""
         pass
 
@@ -43,13 +42,13 @@ class PpuInterceptor(BaseHardwareInterceptor):
     def can_intercept(self, address: int) -> bool:
         return super().can_intercept(address) or address == 0x4014
 
-    def intercept_write(self, address: int, value_source: str) -> List[str]:
+    def intercept_write(self, address: int, value_source: str) -> list[str]:
         if address == 0x4014:
             return [
                 f"    LD   a, {value_source}",
                 "    CALL hal_oam_dma"
             ]
-        
+
         # Generic PPU write (maps to hal_ppu_write which handles sub-registers via A/L)
         reg_offset = address & 0x0007
         return [
@@ -58,7 +57,7 @@ class PpuInterceptor(BaseHardwareInterceptor):
             "    CALL hal_ppu_write"
         ]
 
-    def intercept_read(self, address: int, target_reg: str) -> List[str]:
+    def intercept_read(self, address: int, target_reg: str) -> list[str]:
         reg_offset = address & 0x0007
         return [
             f"    LD   l, {reg_offset}",
@@ -77,7 +76,7 @@ class ApuInterceptor(BaseHardwareInterceptor):
         # Exclude $4014 (PPU DMA)
         return super().can_intercept(address) and address != 0x4014
 
-    def intercept_write(self, address: int, value_source: str) -> List[str]:
+    def intercept_write(self, address: int, value_source: str) -> list[str]:
         reg_offset = address & 0x001F
         return [
             f"    LD   a, {value_source}",
@@ -85,7 +84,7 @@ class ApuInterceptor(BaseHardwareInterceptor):
             "    CALL hal_apu_write"
         ]
 
-    def intercept_read(self, address: int, target_reg: str) -> List[str]:
+    def intercept_read(self, address: int, target_reg: str) -> list[str]:
         reg_offset = address & 0x001F
         return [
             f"    LD   l, {reg_offset}",
@@ -100,7 +99,7 @@ class InputInterceptor(BaseHardwareInterceptor):
     def __init__(self):
         super().__init__(0x4016, 0x4017)
 
-    def intercept_write(self, address: int, value_source: str) -> List[str]:
+    def intercept_write(self, address: int, value_source: str) -> list[str]:
         port = address & 0x0001
         return [
             f"    LD   a, {value_source}",
@@ -108,7 +107,7 @@ class InputInterceptor(BaseHardwareInterceptor):
             "    CALL hal_input_write"
         ]
 
-    def intercept_read(self, address: int, target_reg: str) -> List[str]:
+    def intercept_read(self, address: int, target_reg: str) -> list[str]:
         port = address & 0x0001
         return [
             f"    LD   l, {port}",
@@ -121,27 +120,27 @@ class HardwareInterceptorRegistry:
     """Registry to manage and query hardware interceptors."""
 
     def __init__(self):
-        self.interceptors: List[IHardwareInterceptor] = [
+        self.interceptors: list[IHardwareInterceptor] = [
             PpuInterceptor(),
             ApuInterceptor(),
             InputInterceptor(),
         ]
 
-    def get_interceptor(self, address: int) -> Optional[IHardwareInterceptor]:
+    def get_interceptor(self, address: int) -> IHardwareInterceptor | None:
         """Find an interceptor for the given address."""
         for interceptor in self.interceptors:
             if interceptor.can_intercept(address):
                 return interceptor
         return None
 
-    def intercept_write(self, address: int, value_source: str) -> Optional[List[str]]:
+    def intercept_write(self, address: int, value_source: str) -> list[str] | None:
         """Intercept a write if an interceptor exists."""
         interceptor = self.get_interceptor(address)
         if interceptor:
             return interceptor.intercept_write(address, value_source)
         return None
 
-    def intercept_read(self, address: int, target_reg: str) -> Optional[List[str]]:
+    def intercept_read(self, address: int, target_reg: str) -> list[str] | None:
         """Intercept a read if an interceptor exists."""
         interceptor = self.get_interceptor(address)
         if interceptor:

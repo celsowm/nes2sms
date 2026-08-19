@@ -1,6 +1,5 @@
 """Tests for NES hardware register interception during translation."""
 
-import pytest
 from nes2sms.core.assembly.instruction_translator import InstructionTranslator
 
 

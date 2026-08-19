@@ -1,7 +1,6 @@
 """6502 instruction parsing and representation."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 from enum import Enum
 
 
@@ -28,8 +27,8 @@ class ParsedInstruction:
 
     mnemonic: str
     addressing_mode: AddressingMode
-    operand_value: Optional[int] = None
-    operand_text: Optional[str] = None
+    operand_value: int | None = None
+    operand_text: str | None = None
 
     def is_immediate(self) -> bool:
         return self.addressing_mode == AddressingMode.IMMEDIATE
@@ -59,7 +58,7 @@ class InstructionParser:
     def __init__(self):
         self._mode_cache = {}
 
-    def parse(self, line: str) -> Optional[ParsedInstruction]:
+    def parse(self, line: str) -> ParsedInstruction | None:
         """
         Parse a single assembly line.
 
@@ -160,7 +159,7 @@ class InstructionParser:
 
     def _parse_operand(
         self, operand: str, mnemonic: str = ""
-    ) -> Tuple[AddressingMode, Optional[int], str]:
+    ) -> tuple[AddressingMode, int | None, str]:
         """
         Parse operand to determine addressing mode.
 
@@ -170,8 +169,8 @@ class InstructionParser:
         operand = operand.strip()
 
         # Branch instructions always use relative addressing
-        BRANCH_MNEMONICS = {"BPL", "BMI", "BEQ", "BNE", "BCC", "BCS", "BVC", "BVS", "BRA"}
-        if mnemonic.upper() in BRANCH_MNEMONICS:
+        branch_mnemonics = {"BPL", "BMI", "BEQ", "BNE", "BCC", "BCS", "BVC", "BVS", "BRA"}
+        if mnemonic.upper() in branch_mnemonics:
             value = self._parse_value(operand)
             return (AddressingMode.RELATIVE, value, operand)
 
@@ -220,7 +219,7 @@ class InstructionParser:
         else:
             return (AddressingMode.ABSOLUTE, value, operand)
 
-    def _parse_value(self, text: str) -> Optional[int]:
+    def _parse_value(self, text: str) -> int | None:
         """Parse numeric value from text (hex, decimal, binary)."""
         text = text.strip().upper()
 

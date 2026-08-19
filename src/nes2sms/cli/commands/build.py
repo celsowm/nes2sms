@@ -29,7 +29,7 @@ def cmd_build(args):
         wla = "wla-z80"
         wlab = "wlalink"
 
-    print(f"[build] Compiling main.asm...")
+    print("[build] Compiling main.asm...")
     print(f"[build] wla path: {wla}")
     print(f"[build] cwd: {build_dir}")
 
@@ -47,10 +47,10 @@ def cmd_build(args):
         sys.exit(1)
 
     if result.returncode != 0:
-        print(f"[build] ERROR: Compilation failed", file=sys.stderr)
+        print("[build] ERROR: Compilation failed", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[build] Linking game.sms...")
+    print("[build] Linking game.sms...")
 
     # Link
     result = subprocess.run(
@@ -58,7 +58,7 @@ def cmd_build(args):
     )
 
     if result.returncode != 0:
-        print(f"[build] ERROR: Linking failed", file=sys.stderr)
+        print("[build] ERROR: Linking failed", file=sys.stderr)
         sys.exit(1)
 
     # Check if ROM was created
@@ -67,4 +67,4 @@ def cmd_build(args):
         size = rom_path.stat().st_size
         print(f"[build] SUCCESS: ROM created at {rom_path} ({size} bytes)")
     else:
-        print(f"[build] WARNING: Build succeeded but game.sms not found", file=sys.stderr)
+        print("[build] WARNING: Build succeeded but game.sms not found", file=sys.stderr)

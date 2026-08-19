@@ -1,24 +1,23 @@
 """WLA-DX project generation."""
 
 from pathlib import Path
-from typing import Dict, List
 
 from .components import (
     VirtualPpuWlaDx,
     WlaDxInputHal,
-    WlaDxPsgHal,
     WlaDxMapperHal,
+    WlaDxPsgHal,
 )
 from .templates import (
-    MAIN_ASM,
-    MEMORY_INC,
-    INIT_ASM,
-    INTERRUPTS_ASM,
     ASSETS_ASM,
     GAME_LOGIC_STUB,
     GAME_STUBS_EMPTY,
-    MAKEFILE_CONTENT,
+    INIT_ASM,
+    INTERRUPTS_ASM,
     LINKER_SCRIPT,
+    MAIN_ASM,
+    MAKEFILE_CONTENT,
+    MEMORY_INC,
 )
 
 
@@ -42,7 +41,7 @@ class WlaDxGenerator:
             WlaDxMapperHal(),
         ]
 
-    def generate(self, rom_banks: int = 12, assets_dir: Path = None):
+    def generate(self, rom_banks: int = 12, assets_dir: Path | None = None) -> None:
         """
         Generate complete WLA-DX project.
 

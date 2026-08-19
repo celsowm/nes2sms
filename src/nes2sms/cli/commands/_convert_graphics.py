@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from ...core.graphics import PaletteMapper, TileConverter
 from ...core.graphics.oam_extractor import OamExtractor
@@ -14,8 +13,7 @@ from ...core.graphics.runtime_asset_builder import (
     build_blank_tilemap,
     build_runtime_background_assets,
 )
-from ...core.graphics.runtime_capture import sprites_from_runtime_oam
-from ...core.graphics.runtime_capture import assess_runtime_capture
+from ...core.graphics.runtime_capture import assess_runtime_capture, sprites_from_runtime_oam
 from ...infrastructure.asset_writer import AssetWriter
 from ...infrastructure.fceux_runtime_capture import (
     FceuxRuntimeCaptureConfig,
@@ -31,14 +29,24 @@ class GraphicsConversionArtifacts:
     bg_pal: bytes
     spr_pal: bytes
     tile_result: TileConversionResult
-    color_maps: List[List[int]] = field(default_factory=list)
+    color_maps: list[list[int]] = field(default_factory=list)
     tilemap_bin: bytes = b""
     sat_y: bytes = b""
     sat_xt: bytes = b""
     sprite_variant_map: bytes = b""
-    sprite_variant_profile: Dict[str, object] = field(default_factory=dict)
-    sprite_variant_lookup: Dict[Tuple[int, int], int] = field(default_factory=dict)
-    oam_sprites: List[Dict[str, int]] = field(default_factory=list)
+    sprite_variant_profile: dict[str, object] = field(default_factory=dict)
+    sprite_variant_lookup: dict[tuple[int, int], int] = field(default_factory=dict)
+    oam_sprites: list[dict[str, int]] = field(default_factory=list)
+
+
+@dataclass
+class SpriteVariantResult:
+    """Result of materializing profiled sprite tile variants."""
+
+    lookup: dict[tuple[int, int], int]
+    variant_map: bytes
+    profile: dict[str, object]
+    warnings: list[str]
 
 
 def capture_runtime_snapshot(args, loader, nes_path: Path, out_dir: Path):
@@ -76,7 +84,9 @@ def capture_runtime_snapshot(args, loader, nes_path: Path, out_dir: Path):
         return None
 
 
-def prepare_graphics_assets(args, loader, bank_map: dict, runtime_capture) -> GraphicsConversionArtifacts:
+def prepare_graphics_assets(
+    args, loader, bank_map: dict, runtime_capture
+) -> GraphicsConversionArtifacts:
     """Build all visual artifacts needed by the generated SMS project."""
     split_y = int(getattr(args, "split_y", 48))
     split_tile = max(0, min(27, split_y // 8))
@@ -94,8 +104,8 @@ def prepare_graphics_assets(args, loader, bank_map: dict, runtime_capture) -> Gr
             color_maps=color_maps,
             split_tile=split_tile,
         )
-        tilemap_bin = runtime_bg["tilemap"]
-        for warning in runtime_bg["warnings"]:
+        tilemap_bin = runtime_bg.tilemap
+        for warning in runtime_bg.warnings:
             print(f"[4c] WARNING: {warning}")
         print("[4c] Built runtime tilemap.bin from captured nametable/attributes")
 
@@ -107,7 +117,7 @@ def prepare_graphics_assets(args, loader, bank_map: dict, runtime_capture) -> Gr
         "priority": {"top": 0, "bottom": 0},
         "warnings": [],
     }
-    sprite_variant_lookup: Dict[Tuple[int, int], int] = {}
+    sprite_variant_lookup: dict[tuple[int, int], int] = {}
     if loader.chr_data and oam_sprites:
         variant_result = _apply_profiled_sprite_variants(
             chr_data=loader.chr_data,
@@ -116,13 +126,15 @@ def prepare_graphics_assets(args, loader, bank_map: dict, runtime_capture) -> Gr
             color_maps=color_maps,
             split_y=split_y,
         )
-        sprite_variant_lookup = variant_result["lookup"]
-        sprite_variant_map = variant_result["variant_map"]
-        sprite_variant_profile = variant_result["profile"]
-        for warning in variant_result["warnings"]:
+        sprite_variant_lookup = variant_result.lookup
+        sprite_variant_map = variant_result.variant_map
+        sprite_variant_profile = variant_result.profile
+        for warning in variant_result.warnings:
             print(f"[4c] WARNING: {warning}")
     elif not loader.chr_data:
-        sprite_variant_profile["warnings"] = ["No CHR data available; using default sprite variant map."]
+        sprite_variant_profile["warnings"] = [
+            "No CHR data available; using default sprite variant map."
+        ]
 
     if oam_sprites:
         oam_extractor = OamExtractor(loader.prg_data or b"", len(loader.chr_data or b"") // 16)
@@ -165,7 +177,7 @@ def write_graphics_assets(writer: AssetWriter, graphics: GraphicsConversionArtif
     writer.write_json("sprite_variant_profile.json", graphics.sprite_variant_profile, "assets")
 
 
-def _build_palettes(loader, runtime_capture) -> Tuple[bytes, bytes, List[List[int]]]:
+def _build_palettes(loader, runtime_capture) -> tuple[bytes, bytes, list[list[int]]]:
     nes_palette_ram = None
     if runtime_capture:
         nes_palette_ram = runtime_capture.palette_ram
@@ -182,7 +194,9 @@ def _build_palettes(loader, runtime_capture) -> Tuple[bytes, bytes, List[List[in
     return bg_pal, spr_pal, color_maps
 
 
-def _convert_tiles(args, loader, bank_map: dict, runtime_capture, color_maps: List[List[int]]) -> TileConversionResult:
+def _convert_tiles(
+    args, loader, bank_map: dict, runtime_capture, color_maps: list[list[int]]
+) -> TileConversionResult:
     if not loader.chr_data:
         print("      No CHR data found; using a single blank fallback tile")
         return TileConversionResult(
@@ -212,7 +226,9 @@ def _convert_tiles(args, loader, bank_map: dict, runtime_capture, color_maps: Li
     return result
 
 
-def _extract_oam_sprites(loader, runtime_capture, tile_result: TileConversionResult) -> List[Dict[str, int]]:
+def _extract_oam_sprites(
+    loader, runtime_capture, tile_result: TileConversionResult
+) -> list[dict[str, int]]:
     if runtime_capture:
         oam_sprites = sprites_from_runtime_oam(runtime_capture.oam)
         print(f"[4b] Captured {len(oam_sprites)} sprites from runtime OAM")
@@ -231,7 +247,10 @@ def _extract_oam_sprites(loader, runtime_capture, tile_result: TileConversionRes
     tile_activity = OamExtractor.build_tile_activity(tile_result.sms_tiles)
     ratio = OamExtractor.nonempty_tile_ratio(extracted_oam, tile_activity)
     if not OamExtractor.is_confident_table(extracted_oam, tile_activity=tile_activity):
-        print(f"[4b] Ignoring low-confidence OAM table ({ratio:.0%} referenced tiles are non-empty)")
+        print(
+            f"[4b] Ignoring low-confidence OAM table "
+            f"({ratio:.0%} referenced tiles are non-empty)"
+        )
         print("      Falling back to neutral SAT initialization")
         print()
         return []
@@ -266,7 +285,7 @@ def _build_default_sprite_variant_map() -> bytes:
     return bytes(table)
 
 
-def _find_tile_index_within(tiles: List[bytes], candidate: bytes, max_index: int) -> Optional[int]:
+def _find_tile_index_within(tiles: list[bytes], candidate: bytes, max_index: int) -> int | None:
     limit = min(max_index + 1, len(tiles))
     for idx in range(limit):
         if tiles[idx] == candidate:
@@ -274,7 +293,7 @@ def _find_tile_index_within(tiles: List[bytes], candidate: bytes, max_index: int
     return None
 
 
-def _allocate_variant_slot(free_slots: List[int], tiles: List[bytes], max_index: int) -> Optional[int]:
+def _allocate_variant_slot(free_slots: list[int], tiles: list[bytes], max_index: int) -> int | None:
     if free_slots:
         return free_slots.pop(0)
     if len(tiles) <= max_index:
@@ -286,35 +305,35 @@ def _allocate_variant_slot(free_slots: List[int], tiles: List[bytes], max_index:
 def _apply_profiled_sprite_variants(
     chr_data: bytes,
     tile_result,
-    oam_sprites: List[Dict],
-    color_maps: List[List[int]],
+    oam_sprites: list[dict],
+    color_maps: list[list[int]],
     split_y: int = 48,
-) -> Dict[str, object]:
+) -> SpriteVariantResult:
     """
     Materialize profiled sprite variants and build runtime tile/attr lookup map.
 
     Variant generation is bounded to sprite-addressable tile indices (0-255).
     Unresolved combinations safely fall back to the base tile index.
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     tiles = tile_result.sms_tiles
     metadata = tile_result.tile_metadata
     flip_index = tile_result.flip_index
     max_sprite_tile = min(255, len(tiles) - 1)
 
     if max_sprite_tile < 0:
-        return {
-            "lookup": {},
-            "variant_map": _build_default_sprite_variant_map(),
-            "profile": {
+        return SpriteVariantResult(
+            lookup={},
+            variant_map=_build_default_sprite_variant_map(),
+            profile={
                 "split_y": split_y,
                 "entries": [],
                 "resolved_variants": [],
                 "priority": {"top": 0, "bottom": 0},
                 "warnings": ["No base tiles available for sprite variant mapping."],
             },
-            "warnings": ["No base tiles available for sprite variant mapping."],
-        }
+            warnings=["No base tiles available for sprite variant mapping."],
+        )
 
     if len(color_maps) >= 8:
         sprite_maps = color_maps[4:8]
@@ -326,14 +345,16 @@ def _apply_profiled_sprite_variants(
         sprite_maps = [[0, 1, 2, 3]] * 4
 
     sprite_converter = TileConverter(color_maps=[sprite_maps[0]], flip_strategy="none")
-    variant_lookup: Dict[Tuple[int, int], int] = {}
+    variant_lookup: dict[tuple[int, int], int] = {}
     observed_tiles = {
         int(spr.get("tile", 0)) & 0xFF
         for spr in oam_sprites
         if isinstance(spr.get("tile"), int) and 0 <= int(spr.get("tile", 0)) <= max_sprite_tile
     }
     free_slots = [
-        idx for idx in range(max_sprite_tile + 1) if idx not in observed_tiles and not any(tiles[idx])
+        idx
+        for idx in range(max_sprite_tile + 1)
+        if idx not in observed_tiles and not any(tiles[idx])
     ]
 
     profile_entries = OamExtractor.build_variant_profile(oam_sprites)
@@ -347,14 +368,17 @@ def _apply_profiled_sprite_variants(
 
         if tile > max_sprite_tile:
             warnings.append(
-                f"Variant profile tile {tile} exceeds sprite index range 0-{max_sprite_tile}; fallback to base tile."
+                f"Variant profile tile {tile} exceeds sprite index range "
+                f"0-{max_sprite_tile}; fallback to base tile."
             )
             variant_lookup[(tile, combo)] = tile & 0xFF
             continue
 
         src_off = tile * 16
         if src_off + 16 > len(chr_data):
-            warnings.append(f"Variant source tile {tile} is out of CHR bounds; fallback to base tile.")
+            warnings.append(
+                f"Variant source tile {tile} is out of CHR bounds; fallback to base tile."
+            )
             variant_lookup[(tile, combo)] = tile
             continue
 
@@ -373,7 +397,8 @@ def _apply_profiled_sprite_variants(
             slot = _allocate_variant_slot(free_slots, tiles, max_sprite_tile)
             if slot is None:
                 warnings.append(
-                    f"No sprite tile slots left for tile={tile} attr=${attr:02X} combo={combo}; fallback to base tile."
+                    f"No sprite tile slots left for tile={tile} attr=${attr:02X} "
+                    f"combo={combo}; fallback to base tile."
                 )
                 mapped_idx = tile
             else:
@@ -431,9 +456,9 @@ def _apply_profiled_sprite_variants(
         "priority": {"top": priority_top, "bottom": priority_bottom},
         "warnings": warnings,
     }
-    return {
-        "lookup": variant_lookup,
-        "variant_map": bytes(variant_map),
-        "profile": profile,
-        "warnings": warnings,
-    }
+    return SpriteVariantResult(
+        lookup=variant_lookup,
+        variant_map=bytes(variant_map),
+        profile=profile,
+        warnings=warnings,
+    )

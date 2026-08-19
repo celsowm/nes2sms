@@ -1,7 +1,6 @@
 """Translator interface - DIP contract."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 
 class ITranslator(ABC):
@@ -12,7 +11,7 @@ class ITranslator(ABC):
     """
 
     @abstractmethod
-    def translate_line(self, line: str, address: Optional[int] = None) -> str:
+    def translate_line(self, line: str, address: int | None = None) -> str:
         """
         Translate a single line of 6502 assembly to Z80.
 
@@ -26,7 +25,7 @@ class ITranslator(ABC):
         pass
 
     @abstractmethod
-    def translate_block(self, lines: List[str], start_address: int = 0) -> str:
+    def translate_block(self, lines: list[str], start_address: int = 0) -> str:
         """
         Translate a block of 6502 assembly to Z80.
 
@@ -45,6 +44,6 @@ class ITranslator(ABC):
         pass
 
     @abstractmethod
-    def get_supported_instructions(self) -> List[str]:
+    def get_supported_instructions(self) -> list[str]:
         """Get list of supported instruction mnemonics."""
         pass

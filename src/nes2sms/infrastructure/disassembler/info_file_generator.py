@@ -1,7 +1,6 @@
 """Info file generator for da65."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict
 from pathlib import Path
 
 
@@ -12,8 +11,8 @@ class CodeRange:
     start: int
     end: int
     range_type: str  # CODE, BYTETABLE, WORDTABLE, TEXTTABLE, SKIP
-    name: Optional[str] = None
-    comment: Optional[str] = None
+    name: str | None = None
+    comment: str | None = None
 
     def to_info_line(self) -> str:
         """Convert to da65 info file RANGE directive."""
@@ -32,8 +31,8 @@ class Label:
 
     name: str
     address: int
-    comment: Optional[str] = None
-    size: Optional[int] = None
+    comment: str | None = None
+    size: int | None = None
 
     def to_info_line(self) -> str:
         """Convert to da65 info file LABEL directive."""
@@ -50,8 +49,8 @@ class Label:
 class InfoFileOptions:
     """Global options for da65 info file."""
 
-    input_name: Optional[str] = None
-    output_name: Optional[str] = None
+    input_name: str | None = None
+    output_name: str | None = None
     start_addr: int = 0x8000
     cpu: str = "6502"
     page_length: int = 0  # 0 = no paging
@@ -88,7 +87,7 @@ class InfoFileGenerator:
     ISP: Small focused methods for each directive type.
     """
 
-    def __init__(self, options: Optional[InfoFileOptions] = None):
+    def __init__(self, options: InfoFileOptions | None = None):
         """
         Initialize generator.
 
@@ -99,9 +98,9 @@ class InfoFileGenerator:
 
     def generate(
         self,
-        code_ranges: List[CodeRange],
-        labels: List[Label],
-        segments: Optional[List[Dict]] = None,
+        code_ranges: list[CodeRange],
+        labels: list[Label],
+        segments: list[dict] | None = None,
     ) -> str:
         """
         Generate complete info file content.
@@ -145,7 +144,7 @@ class InfoFileGenerator:
 
         return "\n".join(lines)
 
-    def _segment_to_info(self, segment: Dict) -> str:
+    def _segment_to_info(self, segment: dict) -> str:
         """Convert segment dict to info line."""
         return (
             f"SEGMENT {{ START ${segment.get('start', 0):04X}; "
@@ -155,9 +154,9 @@ class InfoFileGenerator:
 
     def from_symbols(
         self,
-        symbols: List[Dict],
-        code_ranges: List[tuple],
-        data_ranges: List[tuple],
+        symbols: list[dict],
+        code_ranges: list[tuple],
+        data_ranges: list[tuple],
     ) -> str:
         """
         Generate info file from symbol extractor data.
@@ -196,8 +195,8 @@ class InfoFileGenerator:
     def write(
         self,
         output_path: Path,
-        code_ranges: List[CodeRange],
-        labels: List[Label],
+        code_ranges: list[CodeRange],
+        labels: list[Label],
     ):
         """
         Write info file to disk.

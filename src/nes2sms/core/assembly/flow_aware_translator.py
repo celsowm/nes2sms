@@ -1,12 +1,11 @@
 """Flow-aware translator for 6502 to Z80."""
 
-from typing import Dict, List, Optional
 
-from .control_flow_analyzer import ControlFlowAnalyzer
-from .translation_context import TranslationContext
-from .instruction_translator import InstructionTranslator
 from ..interfaces.i_disassembler import ParsedInstruction
 from ..interfaces.i_translator import ITranslator
+from .control_flow_analyzer import ControlFlowAnalyzer
+from .instruction_translator import InstructionTranslator
+from .translation_context import TranslationContext
 
 
 class FlowAwareTranslator(ITranslator):
@@ -19,9 +18,9 @@ class FlowAwareTranslator(ITranslator):
 
     def __init__(
         self,
-        instruction_translator: Optional[InstructionTranslator] = None,
-        flow_analyzer: Optional[ControlFlowAnalyzer] = None,
-        symbol_map: Optional[Dict[int, str]] = None,
+        instruction_translator: InstructionTranslator | None = None,
+        flow_analyzer: ControlFlowAnalyzer | None = None,
+        symbol_map: dict[int, str] | None = None,
     ):
         """
         Initialize flow-aware translator.
@@ -36,7 +35,7 @@ class FlowAwareTranslator(ITranslator):
         self.context = TranslationContext()
         self.symbol_map = symbol_map or {}
 
-    def translate_line(self, line: str, address: Optional[int] = None) -> str:
+    def translate_line(self, line: str, address: int | None = None) -> str:
         """
         Translate a single line (legacy API).
 
@@ -49,7 +48,7 @@ class FlowAwareTranslator(ITranslator):
         """
         return self.instruction_translator.translate_line(line, address)
 
-    def translate_block(self, lines: List[str], start_address: int = 0) -> str:
+    def translate_block(self, lines: list[str], start_address: int = 0) -> str:
         """
         Translate a block of 6502 assembly (legacy API).
 
@@ -64,7 +63,7 @@ class FlowAwareTranslator(ITranslator):
 
     def translate_function(
         self,
-        instructions: List[ParsedInstruction],
+        instructions: list[ParsedInstruction],
         function_name: str,
     ) -> str:
         """
@@ -232,7 +231,7 @@ class FlowAwareTranslator(ITranslator):
             if line.strip():
                 self.context.add_code(line)
 
-    def _parse_address(self, operand: str) -> Optional[int]:
+    def _parse_address(self, operand: str) -> int | None:
         """Parse address from operand string."""
         if not operand:
             return None
@@ -259,6 +258,6 @@ class FlowAwareTranslator(ITranslator):
         """Check if instruction is supported."""
         return self.instruction_translator.is_supported(mnemonic)
 
-    def get_supported_instructions(self) -> List[str]:
+    def get_supported_instructions(self) -> list[str]:
         """Get list of supported instructions."""
         return self.instruction_translator.get_supported_instructions()

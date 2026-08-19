@@ -1,6 +1,5 @@
 """NES OAM/sprite data extractor from PRG ROM."""
 
-from typing import List, Dict, Optional, Tuple
 
 
 class OamExtractor:
@@ -16,7 +15,7 @@ class OamExtractor:
         self.chr_tile_count = chr_tile_count
         self.base_address = base_address
 
-    def extract_oam_table(self) -> Optional[List[Dict]]:
+    def extract_oam_table(self) -> list[dict] | None:
         """
         Search PRG for OAM-like data tables.
 
@@ -43,9 +42,9 @@ class OamExtractor:
             return best_table
         return None
 
-    def _try_parse_oam_at(self, offset: int) -> Optional[List[Dict]]:
+    def _try_parse_oam_at(self, offset: int) -> list[dict] | None:
         """Try to parse an OAM table starting at offset."""
-        sprites = []
+        sprites: list[dict] = []
         pos = offset
         max_sprites = 64  # NES supports 64 sprites
 
@@ -99,9 +98,9 @@ class OamExtractor:
         return combo
 
     @classmethod
-    def build_variant_profile(cls, sprites: List[Dict]) -> List[Dict]:
+    def build_variant_profile(cls, sprites: list[dict]) -> list[dict]:
         """Build profile entries for observed (tile, attr) combinations."""
-        counts: Dict[Tuple[int, int], int] = {}
+        counts: dict[tuple[int, int], int] = {}
         for spr in sprites or []:
             tile = int(spr.get("tile", 0)) & 0xFF
             attr = int(spr.get("attr", 0)) & 0xFF
@@ -121,12 +120,12 @@ class OamExtractor:
         return profile
 
     @staticmethod
-    def build_tile_activity(tiles: List[bytes]) -> List[bool]:
+    def build_tile_activity(tiles: list[bytes]) -> list[bool]:
         """Build a per-tile visibility mask from converted tile data."""
         return [any(tile) for tile in tiles]
 
     @staticmethod
-    def nonempty_tile_ratio(sprites: List[Dict], tile_activity: Optional[List[bool]]) -> float:
+    def nonempty_tile_ratio(sprites: list[dict], tile_activity: list[bool] | None) -> float:
         """
         Calculate how many referenced sprite tiles are visually non-empty.
 
@@ -152,8 +151,8 @@ class OamExtractor:
     @classmethod
     def is_confident_table(
         cls,
-        sprites: List[Dict],
-        tile_activity: Optional[List[bool]] = None,
+        sprites: list[dict],
+        tile_activity: list[bool] | None = None,
         min_nonempty_ratio: float = 0.5,
     ) -> bool:
         """
@@ -174,10 +173,10 @@ class OamExtractor:
 
     def to_sms_sat(
         self,
-        sprites: List[Dict],
-        variant_lookup: Optional[Dict[Tuple[int, int], int]] = None,
+        sprites: list[dict],
+        variant_lookup: dict[tuple[int, int], int] | None = None,
         y_offset: int = 1,
-    ) -> Tuple[bytes, bytes]:
+    ) -> tuple[bytes, bytes]:
         """
         Convert NES OAM entries to SMS SAT format.
 

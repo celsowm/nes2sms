@@ -1,15 +1,16 @@
 """Z80 stub generator from 6502 disassembly symbols."""
 
-from pathlib import Path
-from typing import List, Optional, TYPE_CHECKING
+from __future__ import annotations
 
-from ...shared.models import Symbol
-from ...core.assembly.instruction_translator import InstructionTranslator
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 from ...core.assembly.flow_aware_translator import FlowAwareTranslator
+from ...core.assembly.instruction_translator import InstructionTranslator
+from ...shared.models import Symbol
 
 if TYPE_CHECKING:
     from ...core.interfaces.i_translator import ITranslator
-    from ...core.interfaces.i_disassembler import ParsedInstruction
 
 
 class StubGenerator:
@@ -33,12 +34,12 @@ class StubGenerator:
 
     def __init__(
         self,
-        symbols: Optional[List[Symbol]] = None,
-        translator: Optional["ITranslator"] = None,
+        symbols: list[Symbol] | None = None,
+        translator: ITranslator | None = None,
         enable_translation: bool = True,
         use_flow_aware: bool = True,
-        prg_data: Optional[bytes] = None,
-        data_ranges: Optional[List[tuple]] = None,
+        prg_data: bytes | None = None,
+        data_ranges: list[tuple] | None = None,
         prg_base_address: int = 0x8000,
     ):
         """
@@ -67,6 +68,7 @@ class StubGenerator:
             self.symbol_map[s.address] = s.name
 
         # Initialize translator
+        self.translator: ITranslator | None = None
         if translator:
             self.translator = translator
         elif enable_translation:
@@ -80,9 +82,9 @@ class StubGenerator:
         # Inject symbol_map into FlowAwareTranslator
         if isinstance(self.translator, FlowAwareTranslator):
             self.translator.symbol_map = self.symbol_map
-        
+
         # Track all labels emitted across all snippets to ensure global uniqueness
-        self.global_seen_labels = set()
+        self.global_seen_labels: set[str] = set()
 
     def generate_game_logic_stub(self) -> str:
         """Generate game_logic.asm with translated code for each symbol."""
@@ -98,7 +100,7 @@ class StubGenerator:
         # The bootstrap (init.asm) already loads palettes, tiles, tilemap, and SAT,
         # so GameMain just needs to jump to the game's entry point.
         entry_target = self._find_reset_entry_target(symbol_names)
-        
+
         if entry_target:
             lines.extend(
                 [
@@ -151,12 +153,12 @@ class StubGenerator:
         # Filter to data ranges that fall within the PRG address space
         # and are large enough to be meaningful (skip single-byte gaps
         # and huge padding ranges)
-        MIN_TABLE_SIZE = 4
-        MAX_TABLE_SIZE = 1024
+        min_table_size = 4
+        max_table_size = 1024
         tables = []
         for start, end in self.data_ranges:
             size = end - start + 1
-            if size < MIN_TABLE_SIZE or size > MAX_TABLE_SIZE:
+            if size < min_table_size or size > max_table_size:
                 continue
             offset_start = start - self.prg_base_address
             offset_end = end - self.prg_base_address + 1
@@ -191,7 +193,7 @@ class StubGenerator:
 
         return "\n".join(lines)
 
-    def _find_reset_entry_target(self, symbol_names: set) -> Optional[str]:
+    def _find_reset_entry_target(self, symbol_names: set) -> str | None:
         """Pick the best translated routine to boot the game."""
         preferred_labels = (
             "RESET_Handler",
@@ -230,7 +232,7 @@ class StubGenerator:
     def _generate_stub(self, symbol: Symbol) -> str:
         """Generate single Z80 stub from 6502 symbol."""
         lines = [
-            f"; ============================================================",
+            "; ============================================================",
             f"; NES: {symbol.name} @ ${symbol.address:04X}",
             f"; Type: {symbol.type} | Bank: {symbol.bank}",
         ]
@@ -238,7 +240,7 @@ class StubGenerator:
         if symbol.comment:
             lines.append(f"; Comment: {symbol.comment}")
 
-        lines.append(f"; ============================================================")
+        lines.append("; ============================================================")
         lines.append(f"{symbol.name}:")
 
         # Generate translated code if available
@@ -251,7 +253,7 @@ class StubGenerator:
                 lines.append("    ret")
         elif symbol.disassembly_snippet:
             # Has disassembly but no translator
-            lines.append(f"; Original 6502 code:")
+            lines.append("; Original 6502 code:")
             for line in symbol.disassembly_snippet.split("\n"):
                 lines.append(f";   {line}")
             lines.append("    ; TODO: Implement")
@@ -264,7 +266,7 @@ class StubGenerator:
         lines.append("")
         return "\n".join(lines)
 
-    def _translate_symbol(self, symbol: Symbol) -> Optional[str]:
+    def _translate_symbol(self, symbol: Symbol) -> str | None:
         """
         Translate symbol's disassembly to Z80.
 
@@ -280,9 +282,10 @@ class StubGenerator:
         # Check if we have FlowAwareTranslator
         if isinstance(self.translator, FlowAwareTranslator):
             # Parse instructions and translate with flow awareness
-            from ...core.interfaces.i_disassembler import ParsedInstruction
 
-            instructions = self._parse_disassembly(symbol.disassembly_snippet, base_address=symbol.address)
+            instructions = self._parse_disassembly(
+                symbol.disassembly_snippet, base_address=symbol.address
+            )
             if instructions:
                 result = self.translator.translate_function(
                     instructions=instructions,
@@ -317,7 +320,7 @@ class StubGenerator:
         if not self.data_ranges:
             return code
 
-        MIN_TABLE_SIZE = 4
+        min_table_size = 4
         prg_end = self.prg_base_address + len(self.prg_data) if self.prg_data else 0xFFFF
 
         def _replace_match(match):
@@ -330,7 +333,7 @@ class StubGenerator:
             if 0xC000 <= addr <= 0xDFFF:
                 return match.group(0)
             for start, end in self.data_ranges:
-                if end - start + 1 < MIN_TABLE_SIZE:
+                if end - start + 1 < min_table_size:
                     continue
                 if start <= addr <= end:
                     offset = addr - start
@@ -343,7 +346,7 @@ class StubGenerator:
         # Match patterns like "LD   hl, $83A9h" or "LD   hl, $083A9h"
         return re.sub(r"LD   hl, \$0?([0-9A-Fa-f]{4,5})h", _replace_match, code)
 
-    def _parse_disassembly(self, snippet: str, base_address: int = 0) -> List:
+    def _parse_disassembly(self, snippet: str, base_address: int = 0) -> list:
         """
         Parse disassembly snippet into ParsedInstruction list.
 
@@ -382,7 +385,9 @@ class StubGenerator:
             # Parse instruction
             parsed = parser.parse(line)
             if parsed:
-                instr_size = self._estimate_6502_size(parsed.mnemonic, parsed.operand_text)
+                instr_size = self._estimate_6502_size(
+                    parsed.mnemonic, parsed.operand_text or ""
+                )
 
                 instr = ParsedInstr(
                     address=current_address,
@@ -443,7 +448,7 @@ class StubGenerator:
         deduped = []
         # Match label (optional whitespace + name + colon)
         label_pattern = re.compile(r"^(\s*)([a-zA-Z0-9_]+):")
-        
+
         for line in lines:
             match = label_pattern.search(line)
             if match and not line.strip().startswith(";"):

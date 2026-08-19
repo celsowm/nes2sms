@@ -1,6 +1,6 @@
 """NES to SMS tile converter (2bpp to 4bpp)."""
 
-from typing import List, Dict, Tuple, Optional
+
 from ...shared.models import TileConversionResult
 
 
@@ -14,7 +14,7 @@ class TileConverter:
 
     def __init__(
         self,
-        color_maps: List[List[int]],
+        color_maps: list[list[int]],
         flip_strategy: str = "cache",
         max_tiles: int = 512,
     ):
@@ -30,7 +30,7 @@ class TileConverter:
         self.flip_strategy = flip_strategy
         self.max_tiles = max_tiles
 
-    def convert(self, chr_data: bytes, bank_id: Optional[int] = 0) -> TileConversionResult:
+    def convert(self, chr_data: bytes, bank_id: int | None = 0) -> TileConversionResult:
         """
         Convert all tiles in CHR data.
 
@@ -41,11 +41,11 @@ class TileConverter:
         Returns:
             TileConversionResult with SMS tiles, flip index, and metadata
         """
-        tiles = []
-        flip_index = {}
-        warnings = []
-        metadata = []
-        base_tiles = []
+        tiles: list[bytes] = []
+        flip_index: dict = {}
+        warnings: list[str] = []
+        metadata: list[dict] = []
+        base_tiles: list[bytes] = []
 
         num_tiles = len(chr_data) // 16
 
@@ -75,7 +75,7 @@ class TileConverter:
             sms_tiles=tiles, flip_index=flip_index, warnings=warnings, tile_metadata=metadata
         )
 
-    def convert_multi_bank(self, chr_banks: List[Tuple[int, bytes]]) -> TileConversionResult:
+    def convert_multi_bank(self, chr_banks: list[tuple[int, bytes]]) -> TileConversionResult:
         """
         Convert tiles from multiple CHR banks.
 
@@ -85,10 +85,10 @@ class TileConverter:
         Returns:
             TileConversionResult with all tiles and bank metadata
         """
-        all_tiles = []
-        all_flip_index = {}
-        all_warnings = []
-        all_metadata = []
+        all_tiles: list[bytes] = []
+        all_flip_index: dict = {}
+        all_warnings: list[str] = []
+        all_metadata: list[dict] = []
 
         for bank_id, chr_data in chr_banks:
             result = self.convert(chr_data, bank_id=bank_id)
@@ -106,11 +106,11 @@ class TileConverter:
             tile_metadata=all_metadata,
         )
 
-    def convert_tile_with_map(self, tile_16bpp: bytes, color_map: List[int]) -> bytes:
+    def convert_tile_with_map(self, tile_16bpp: bytes, color_map: list[int]) -> bytes:
         """Convert a NES 2bpp tile using an explicit color map."""
         return self._convert_tile(tile_16bpp, color_map=color_map)
 
-    def _convert_tile(self, tile_16bpp: bytes, color_map: Optional[List[int]] = None) -> bytes:
+    def _convert_tile(self, tile_16bpp: bytes, color_map: list[int] | None = None) -> bytes:
         """
         Convert single 16-byte NES tile to 32-byte SMS tile.
 
@@ -149,7 +149,7 @@ class TileConverter:
         return bytes(sms32)
 
     @staticmethod
-    def _find_tile_index(tiles: List[bytes], candidate: bytes) -> Optional[int]:
+    def _find_tile_index(tiles: list[bytes], candidate: bytes) -> int | None:
         for idx, tile in enumerate(tiles):
             if tile == candidate:
                 return idx
@@ -159,11 +159,11 @@ class TileConverter:
         self,
         tile_index: int,
         sms_tile: bytes,
-        flip_index: Dict,
-        tiles: List[bytes],
-        metadata: List[Dict],
-        warnings: List[str],
-        bank_id: Optional[int] = 0,
+        flip_index: dict,
+        tiles: list[bytes],
+        metadata: list[dict],
+        warnings: list[str],
+        bank_id: int | None = 0,
     ):
         """
         Handle flip variant generation for sprite cache.

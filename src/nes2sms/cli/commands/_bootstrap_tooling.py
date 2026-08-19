@@ -7,9 +7,9 @@ import shutil
 import subprocess
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
-
+from typing import Any
 
 FCEUX_RELEASE_API = "https://api.github.com/repos/TASEmulators/fceux/releases/latest"
 BLASTEM_WIN_URL = "https://www.retrodev.com/blastem/blastem-win32-0.6.2.zip"
@@ -220,7 +220,8 @@ def download_json(url: str) -> dict[str, Any]:
         },
     )
     with urllib.request.urlopen(request) as response:
-        return json.load(response)
+        data: dict[str, Any] = json.load(response)
+        return data
 
 
 def download_file(url: str, destination: Path) -> None:

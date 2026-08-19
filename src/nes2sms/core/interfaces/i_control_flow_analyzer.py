@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 
 from .i_disassembler import ParsedInstruction
 
@@ -20,9 +19,9 @@ class BasicBlock:
 
     start_addr: int
     end_addr: int
-    instructions: List[ParsedInstruction] = field(default_factory=list)
-    successors: List[int] = field(default_factory=list)  # Target addresses
-    predecessors: List[int] = field(default_factory=list)  # Addresses that jump here
+    instructions: list[ParsedInstruction] = field(default_factory=list)
+    successors: list[int] = field(default_factory=list)  # Target addresses
+    predecessors: list[int] = field(default_factory=list)  # Addresses that jump here
 
     def add_instruction(self, instr: ParsedInstruction):
         """Add instruction to block."""
@@ -51,7 +50,7 @@ class LoopInfo:
 
     header_addr: int  # Loop header (entry point)
     back_edge_from: int  # Address of backward branch
-    body_blocks: List[int] = field(default_factory=list)  # Block addresses in loop
+    body_blocks: list[int] = field(default_factory=list)  # Block addresses in loop
     nesting_level: int = 0
 
 
@@ -60,9 +59,9 @@ class SubroutineInfo:
     """Information about a detected subroutine."""
 
     entry_addr: int
-    exit_addrs: List[int] = field(default_factory=list)  # RTS/RTI addresses
-    calls: List[int] = field(default_factory=list)  # JSR addresses within
-    blocks: List[int] = field(default_factory=list)  # Block addresses
+    exit_addrs: list[int] = field(default_factory=list)  # RTS/RTI addresses
+    calls: list[int] = field(default_factory=list)  # JSR addresses within
+    blocks: list[int] = field(default_factory=list)  # Block addresses
 
 
 @dataclass
@@ -73,35 +72,35 @@ class ControlFlowGraph:
     LSP: Can be substituted by any CFG implementation.
     """
 
-    blocks: Dict[int, BasicBlock] = field(default_factory=dict)  # addr -> block
-    entry_points: List[int] = field(default_factory=list)
-    loops: List[LoopInfo] = field(default_factory=list)
-    subroutines: Dict[int, SubroutineInfo] = field(default_factory=dict)
+    blocks: dict[int, BasicBlock] = field(default_factory=dict)  # addr -> block
+    entry_points: list[int] = field(default_factory=list)
+    loops: list[LoopInfo] = field(default_factory=list)
+    subroutines: dict[int, SubroutineInfo] = field(default_factory=dict)
 
     def add_block(self, block: BasicBlock):
         """Add block to CFG."""
         self.blocks[block.start_addr] = block
 
-    def get_block_at(self, addr: int) -> Optional[BasicBlock]:
+    def get_block_at(self, addr: int) -> BasicBlock | None:
         """Get block containing address."""
         for block in self.blocks.values():
             if block.start_addr <= addr < block.end_addr:
                 return block
         return None
 
-    def get_block_by_entry(self, addr: int) -> Optional[BasicBlock]:
+    def get_block_by_entry(self, addr: int) -> BasicBlock | None:
         """Get block by entry point address."""
         return self.blocks.get(addr)
 
-    def find_loops(self) -> List[LoopInfo]:
+    def find_loops(self) -> list[LoopInfo]:
         """Identify loops in CFG."""
         return self.loops
 
-    def find_subroutines(self) -> Dict[int, SubroutineInfo]:
+    def find_subroutines(self) -> dict[int, SubroutineInfo]:
         """Identify subroutines in CFG."""
         return self.subroutines
 
-    def get_ordered_blocks(self) -> List[BasicBlock]:
+    def get_ordered_blocks(self) -> list[BasicBlock]:
         """Get blocks in address order."""
         return [self.blocks[addr] for addr in sorted(self.blocks.keys())]
 
@@ -114,7 +113,7 @@ class IControlFlowAnalyzer(ABC):
     """
 
     @abstractmethod
-    def analyze(self, instructions: List[ParsedInstruction]) -> ControlFlowGraph:
+    def analyze(self, instructions: list[ParsedInstruction]) -> ControlFlowGraph:
         """
         Build control flow graph from instructions.
 
@@ -127,11 +126,11 @@ class IControlFlowAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def identify_loops(self, cfg: ControlFlowGraph) -> List[LoopInfo]:
+    def identify_loops(self, cfg: ControlFlowGraph) -> list[LoopInfo]:
         """Identify loops in control flow graph."""
         pass
 
     @abstractmethod
-    def identify_subroutines(self, cfg: ControlFlowGraph) -> Dict[int, SubroutineInfo]:
+    def identify_subroutines(self, cfg: ControlFlowGraph) -> dict[int, SubroutineInfo]:
         """Identify subroutines in control flow graph."""
         pass

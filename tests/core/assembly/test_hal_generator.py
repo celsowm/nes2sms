@@ -2,8 +2,8 @@
 
 import re
 
-from nes2sms.core.sms.hal_generator import HALGenerator
 from nes2sms.core.graphics.palette_mapper import PaletteMapper
+from nes2sms.core.sms.hal_generator import HALGenerator
 
 
 class TestHalGenerator:

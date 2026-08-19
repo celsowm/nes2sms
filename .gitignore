@@ -24,3 +24,12 @@ __pycache__/
 env/
 venv/
 .env
+
+# Test / tooling caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/

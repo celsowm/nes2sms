@@ -1,7 +1,6 @@
 """6502 to Z80 register mapping and calling conventions."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 
 @dataclass
@@ -15,7 +14,7 @@ class RegisterMapping:
     stack_pointer: str = "sp"
     program_counter: str = "pc"
 
-    def get_6502_reg(self, z80_reg: str) -> Optional[str]:
+    def get_6502_reg(self, z80_reg: str) -> str | None:
         """Get 6502 register name from Z80 register."""
         mapping = {
             "a": "A",
@@ -50,11 +49,11 @@ class CallingConvention:
     - Callee saves: None (caller must preserve what it needs)
     """
 
-    param_regs_16: List[str] = None
+    param_regs_16: list[str] | None = None
     return_reg_8: str = "a"
     return_reg_16: str = "hl"
-    caller_save: List[str] = None
-    callee_save: List[str] = None
+    caller_save: list[str] | None = None
+    callee_save: list[str] | None = None
 
     def __post_init__(self):
         if self.param_regs_16 is None:
@@ -79,12 +78,12 @@ class FlagMapping:
     }
 
     @classmethod
-    def get_z80_flag(cls, flag_6502: str) -> Optional[str]:
+    def get_z80_flag(cls, flag_6502: str) -> str | None:
         """Get Z80 flag from 6502 flag."""
         return cls.FLAG_MAP.get(flag_6502.upper())
 
     @classmethod
-    def get_6502_flag(cls, flag_z80: str) -> Optional[str]:
+    def get_6502_flag(cls, flag_z80: str) -> str | None:
         """Get 6502 flag from Z80 flag."""
         reverse_map = {v: k for k, v in cls.FLAG_MAP.items() if v is not None}
         return reverse_map.get(flag_z80.upper())

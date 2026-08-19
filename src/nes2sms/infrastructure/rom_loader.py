@@ -2,9 +2,8 @@
 
 import hashlib
 from pathlib import Path
-from typing import Tuple, Optional
 
-from ..core.nes.header import parse_ines_header, extract_sections, read_vectors
+from ..core.nes.header import extract_sections, parse_ines_header, read_vectors
 from ..shared.models import NesHeader
 
 
@@ -12,13 +11,13 @@ class RomLoader:
     """Loads and parses NES ROM files."""
 
     def __init__(self):
-        self.data: Optional[bytes] = None
-        self.header: Optional[NesHeader] = None
-        self.prg_data: Optional[bytes] = None
-        self.chr_data: Optional[bytes] = None
-        self.trainer_data: Optional[bytes] = None
-        self.vectors: Optional[dict] = None
-        self.sha256: Optional[str] = None
+        self.data: bytes | None = None
+        self.header: NesHeader | None = None
+        self.prg_data: bytes | None = None
+        self.chr_data: bytes | None = None
+        self.trainer_data: bytes | None = None
+        self.vectors: dict | None = None
+        self.sha256: str | None = None
 
     def load(self, rom_path: Path) -> "RomLoader":
         """
@@ -39,6 +38,8 @@ class RomLoader:
 
     def get_manifest_dict(self) -> dict:
         """Get manifest dictionary for JSON serialization."""
+        if self.header is None:
+            raise RuntimeError("ROM has not been loaded or the iNES header is invalid.")
         return {
             "format": self.header.format,
             "mapper": self.header.mapper,

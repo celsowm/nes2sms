@@ -2,8 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
 
 
 @dataclass
@@ -13,9 +11,9 @@ class ParsedInstruction:
     address: int
     bytes_raw: bytes
     mnemonic: str
-    operands: List[str]
-    label: Optional[str] = None
-    comment: Optional[str] = None
+    operands: list[str]
+    label: str | None = None
+    comment: str | None = None
 
     def to_string(self) -> str:
         """Convert to assembly string."""
@@ -35,16 +33,16 @@ class DisassemblyDatabase:
     LSP: Can be substituted by any implementation.
     """
 
-    instructions: Dict[int, ParsedInstruction] = field(default_factory=dict)
-    labels: Dict[int, str] = field(default_factory=dict)
-    code_ranges: List[Tuple[int, int]] = field(default_factory=list)
-    data_ranges: List[Tuple[int, int]] = field(default_factory=list)
+    instructions: dict[int, ParsedInstruction] = field(default_factory=dict)
+    labels: dict[int, str] = field(default_factory=dict)
+    code_ranges: list[tuple[int, int]] = field(default_factory=list)
+    data_ranges: list[tuple[int, int]] = field(default_factory=list)
 
-    def get_instruction_at(self, addr: int) -> Optional[ParsedInstruction]:
+    def get_instruction_at(self, addr: int) -> ParsedInstruction | None:
         """Get instruction at address."""
         return self.instructions.get(addr)
 
-    def get_label_at(self, addr: int) -> Optional[str]:
+    def get_label_at(self, addr: int) -> str | None:
         """Get label at address."""
         return self.labels.get(addr)
 
@@ -55,7 +53,7 @@ class DisassemblyDatabase:
                 return True
         return False
 
-    def get_function_at(self, addr: int, max_instructions: int = 1000) -> List[ParsedInstruction]:
+    def get_function_at(self, addr: int, max_instructions: int = 1000) -> list[ParsedInstruction]:
         """Get all instructions from addr until RTS/RTI or max."""
         result = []
         current = addr
@@ -80,7 +78,7 @@ class DisassemblyDatabase:
         """Add label to database."""
         self.labels[addr] = label
 
-    def to_instruction_list(self) -> List[ParsedInstruction]:
+    def to_instruction_list(self) -> list[ParsedInstruction]:
         """Return instructions sorted by address."""
         return [self.instructions[addr] for addr in sorted(self.instructions.keys())]
 
@@ -91,8 +89,8 @@ class DisassemblyResult:
 
     output: str
     success: bool
-    error_message: Optional[str] = None
-    database: Optional[DisassemblyDatabase] = None
+    error_message: str | None = None
+    database: DisassemblyDatabase | None = None
 
 
 class IDisassembler(ABC):
@@ -108,7 +106,7 @@ class IDisassembler(ABC):
         prg_data: bytes,
         start_addr: int = 0x8000,
         cpu: str = "6502",
-        labels: Optional[Dict[int, str]] = None,
+        labels: dict[int, str] | None = None,
     ) -> DisassemblyResult:
         """
         Disassemble PRG data.

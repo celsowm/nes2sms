@@ -1,10 +1,9 @@
 """da65 wrapper - Executes external disassembler."""
 
+import shutil
 import subprocess
 import tempfile
-import shutil
 from pathlib import Path
-from typing import Optional, Dict
 
 from ...core.interfaces.i_disassembler import DisassemblyResult
 
@@ -20,7 +19,7 @@ class Da65Wrapper:
     SUPPORTED_CPUS = {"6502", "6502X", "65SC02", "65C02"}
     DEFAULT_CPU = "6502"
 
-    def __init__(self, da65_path: Optional[Path] = None):
+    def __init__(self, da65_path: Path | None = None):
         """
         Initialize da65 wrapper.
 
@@ -29,7 +28,7 @@ class Da65Wrapper:
         """
         self.da65_path = da65_path or self._find_da65()
 
-    def _find_da65(self) -> Optional[Path]:
+    def _find_da65(self) -> Path | None:
         """
         Find da65 in PATH or common locations.
 
@@ -66,7 +65,7 @@ class Da65Wrapper:
         input_data: bytes,
         start_addr: int = 0x8000,
         cpu: str = "6502",
-        info_file: Optional[Path] = None,
+        info_file: Path | None = None,
         multi_pass: bool = True,
     ) -> DisassemblyResult:
         """
@@ -165,7 +164,7 @@ class Da65Wrapper:
                     error_message=f"da65 execution failed: {str(e)}",
                 )
 
-    def get_version(self) -> Optional[str]:
+    def get_version(self) -> str | None:
         """Get da65 version string."""
         if not self.is_available():
             return None

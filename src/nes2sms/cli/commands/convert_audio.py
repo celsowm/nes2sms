@@ -28,9 +28,9 @@ def cmd_convert_audio(args):
     writer.write_json("events.json", [], subdir="audio")
 
     # Create psg_data.asm placeholder
-    psg_asm = """; PSG Data
+    psg_asm = f"""; PSG Data
 ; TODO: Convert APU events to PSG data
-; Strategy: {strategy}
+; Strategy: {args.audio_strategy}
 
 .section "PSGData" FREE
 
@@ -39,10 +39,10 @@ PSG_Data:
     ret
 
 .ends
-""".format(strategy=args.audio_strategy)
+"""
 
     writer.write_text("psg_data.asm", psg_asm, subdir="audio")
 
-    print(f"[convert-audio] Audio conversion not yet implemented.")
+    print("[convert-audio] Audio conversion not yet implemented.")
     print(f"[convert-audio] Strategy: {args.audio_strategy}")
     print(f"[convert-audio] Created stub files in {out_dir}/audio/")

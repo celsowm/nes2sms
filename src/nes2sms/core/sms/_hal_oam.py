@@ -38,7 +38,7 @@ _oam_y_loop:
     inc  hl            ; skip 4 bytes to next sprite
     djnz _oam_y_loop
 
-    ; --- Second pass: write X/tile pairs to SAT $3F80 ---
+    ; --- Second pass: write X/tile/attr triplets to SAT $3F80 ---
     pop  hl
     ld   a, $80
     out  ($BF), a
@@ -55,24 +55,52 @@ _oam_xt_loop:
     inc  hl            ; attributes offset +2
     ld   a, (hl)
     ld   e, a
-    bit  5, e
+
+    ; Build attribute byte in advance
+    ; SMS format: bit7=priority, bit5=V-flip, bit4=H-flip, bits2-0=palette
+    ld   a, $00        ; Start with all zeros
+
+    ; Set palette bits (NES attributes bits 0-1)
+    ld   a, e
+    and  $03           ; Keep only palette bits
+    ld   c, a          ; C = palette bits
+
+    ; Set flip bits
+    ld   a, $00        ; Start fresh
+    bit  6, e          ; Check H-flip
+    jr   z, _oam_no_hflip
+    set  4, a          ; Set H-flip bit (SMS bit 4)
+_oam_no_hflip:
+    bit  7, e          ; Check V-flip
+    jr   z, _oam_no_vflip
+    set  5, a          ; Set V-flip bit (SMS bit 5)
+_oam_no_vflip:
+    or   c             ; Combine with palette bits
+    ld   c, a          ; C = attribute byte (without priority)
+
+    ; Determine priority bit
+    ld   a, $00        ; Default: priority=0 (in front of background)
+    bit  5, e          ; Check NES priority bit
     jr   z, _oam_prio_done
     ld   a, c
     cp   {split_y}
-    jr   c, _oam_prio_mark_top
-    ld   a, $01
-    ld   (_oam_prio_bottom), a
-    jr   _oam_prio_done
-_oam_prio_mark_top:
-    ld   a, $01
-    ld   (_oam_prio_top), a
+    jr   nc, _oam_prio_done
+    ld   a, c
+    set  7, a          ; Set priority bit (behind background)
 _oam_prio_done:
+    ld   c, a          ; C = complete attribute byte
+
     inc  hl            ; X offset +3
     ld   a, (hl)      ; NES X position (offset +3)
     out  ($BE), a      ; write X
+
     push hl
     call _oam_map_variant_tile
     out  ($BE), a      ; write tile
+
+    ld   a, c          ; Get attribute byte
+    out  ($BE), a      ; write attribute byte
+
     pop  hl
     inc  hl            ; advance to next sprite
     djnz _oam_xt_loop

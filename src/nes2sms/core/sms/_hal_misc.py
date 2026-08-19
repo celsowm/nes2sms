@@ -56,51 +56,51 @@ hal_apu_write:
     push bc
     push de
     push hl
-    
+
     ld   a, l
     cp   $10
     jr   nc, .not_channel_reg
-    
+
     ; Calculate jump table offset
     add  a, a         ; A * 2
     ld   e, a
     ld   d, 0
     ld   hl, apu_handlers
     add  hl, de
-    
+
     ; Get value back
     pop  de       ; we pushed DE originally, but we want the pushed HL which has L=offset
     pop  de       ; skip old DE
     pop  bc       ; skip old BC
     pop  af       ; now A has value
-    
+
     ; Setup stack for jump
     push af
     push bc
     push de
-    push de       ; extra push to restore stack balance after jump if needed. Actually let's do clean restore:
-    
+    push de       ; extra push to restore stack balance after jump if needed
+
     ; Simpler way:
     ld   e, (hl)
     inc  hl
     ld   d, (hl)
-    
+
     ; restore A
     pop  hl       ; throw away
     pop  hl
     pop  bc
     pop  af
-    
+
     ; Call handler via DE
     push hl
     push bc
     push de
     ld   h, d
     ld   l, e
-    
+
     ; jump to handler. Handler will return.
     call __call_hl
-    
+
     pop  de
     pop  bc
     pop  hl
@@ -157,17 +157,17 @@ apu_pulse1_3:
     ld   a, (_apu_pulse1_per_lo)
     ld   l, a
     ; HL = NES Period
-    
+
     ; SMS_Period = NES_Period + 1
     inc  hl
-    
+
     ; Write Tone 1 (1000 0000)
     ; Low byte: 1000 | (period & 0xF)
     ld   a, l
     and  $0F
     or   %10000000
     out  ($7f), a
-    
+
     ; High byte: (period >> 4) & 0x3F
     ; We need to shift HL right 4 times
     ld   a, h
@@ -177,7 +177,7 @@ apu_pulse1_3:
     rrca
     and  $30
     ld   b, a
-    
+
     ld   a, l
     rlca
     rlca
@@ -215,15 +215,15 @@ apu_pulse2_3:
     ld   h, a
     ld   a, (_apu_pulse2_per_lo)
     ld   l, a
-    
+
     inc  hl
-    
+
     ; Write Tone 2 (1010 0000)
     ld   a, l
     and  $0F
     or   %10100000
     out  ($7f), a
-    
+
     ld   a, h
     rrca
     rrca
@@ -231,7 +231,7 @@ apu_pulse2_3:
     rrca
     and  $30
     ld   b, a
-    
+
     ld   a, l
     rlca
     rlca
@@ -271,17 +271,17 @@ apu_triangle_3:
     ld   h, a
     ld   a, (_apu_tri_per_lo)
     ld   l, a
-    
+
     ; SMS_Period = (NES_Period + 1) * 2
     inc  hl
     add  hl, hl
-    
+
     ; Write Tone 3 (1100 0000)
     ld   a, l
     and  $0F
     or   %11000000
     out  ($7f), a
-    
+
     ld   a, h
     rrca
     rrca
@@ -289,7 +289,7 @@ apu_triangle_3:
     rrca
     and  $30
     ld   b, a
-    
+
     ld   a, l
     rlca
     rlca
@@ -323,7 +323,7 @@ apu_noise_2:
     ; SMS has White Noise and Periodic Noise.
     ; bit 7: 1 -> Periodic (SMS bit = 0)
     ; bit 7: 0 -> White (SMS bit = 1)
-    
+
     ld   b, a
     and  $80
     rlca

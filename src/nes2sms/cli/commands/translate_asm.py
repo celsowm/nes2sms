@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from ...core.assembly.instruction_translator import InstructionTranslator
-from ...infrastructure.asset_writer import AssetWriter
 
 
 def cmd_translate_asm(args):

@@ -7,7 +7,6 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def build_rom(out_dir: Path) -> bool:
@@ -118,7 +117,9 @@ def generate_wla_project(
     prg_banks = bank_map.get("prg_banks", 2)
     rom_banks = prg_banks + 1
 
-    (build_dir / "main.asm").write_text(MAIN_ASM.replace("NUM_BANKS", str(rom_banks)), encoding="utf-8")
+    (build_dir / "main.asm").write_text(
+        MAIN_ASM.replace("NUM_BANKS", str(rom_banks)), encoding="utf-8"
+    )
     (build_dir / "memory.inc").write_text(
         MEMORY_INC.replace("NUM_ROM_BANKS", str(rom_banks)),
         encoding="utf-8",
@@ -148,7 +149,7 @@ def generate_wla_project(
     print(f"      ROM banks: {rom_banks}")
 
 
-def launch_emulator(out_dir: Path, emulator_path: Optional[str] = None) -> None:
+def launch_emulator(out_dir: Path, emulator_path: str | None = None) -> None:
     """Launch the built SMS ROM in an emulator."""
     min_rom_size = 1024
     sms_rom = _find_built_sms_rom(out_dir, min_rom_size=min_rom_size)
@@ -178,7 +179,7 @@ def launch_emulator(out_dir: Path, emulator_path: Optional[str] = None) -> None:
         print(f"      ERROR: Failed to launch emulator: {exc}")
 
 
-def detect_emulator() -> Optional[str]:
+def detect_emulator() -> str | None:
     """Auto-detect common SMS emulators."""
     emulator_names = {
         "Windows": [
@@ -230,7 +231,7 @@ def _copy_generated_dir(src_dir: Path, dst_dir: Path) -> None:
             shutil.copy2(entry, dst_dir)
 
 
-def _find_built_sms_rom(out_dir: Path, *, min_rom_size: int) -> Optional[Path]:
+def _find_built_sms_rom(out_dir: Path, *, min_rom_size: int) -> Path | None:
     search_paths = [out_dir / "build", out_dir]
     for search_path in search_paths:
         if not search_path.exists():

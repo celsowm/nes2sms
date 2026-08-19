@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 
 class AssetWriter:
@@ -18,7 +18,7 @@ class AssetWriter:
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def write_binary(self, filename: str, data: bytes, subdir: str = None):
+    def write_binary(self, filename: str, data: bytes, subdir: str | None = None):
         """Write binary data to file."""
         if subdir:
             path = self.output_dir / subdir / filename
@@ -27,7 +27,7 @@ class AssetWriter:
             path = self.output_dir / filename
         path.write_bytes(data)
 
-    def write_text(self, filename: str, content: str, subdir: str = None):
+    def write_text(self, filename: str, content: str, subdir: str | None = None):
         """Write text data to file."""
         if subdir:
             path = self.output_dir / subdir / filename
@@ -36,7 +36,7 @@ class AssetWriter:
             path = self.output_dir / filename
         path.write_text(content, encoding="utf-8")
 
-    def write_json(self, filename: str, data: Any, subdir: str = None, indent: int = 2):
+    def write_json(self, filename: str, data: Any, subdir: str | None = None, indent: int = 2):
         """Write JSON data to file."""
         if subdir:
             path = self.output_dir / subdir / filename
@@ -45,7 +45,7 @@ class AssetWriter:
             path = self.output_dir / filename
         path.write_text(json.dumps(data, indent=indent), encoding="utf-8")
 
-    def write_tiles(self, tiles: List[bytes]):
+    def write_tiles(self, tiles: list[bytes]):
         """Write tile data to tiles.bin."""
         data = b"".join(tiles)
         self.write_binary("tiles.bin", data, "assets")
@@ -54,13 +54,13 @@ class AssetWriter:
         """Write palette data (bg or spr)."""
         self.write_binary(f"palette_{name}.bin", palette, "assets")
 
-    def write_flip_index(self, flip_index: Dict):
+    def write_flip_index(self, flip_index: dict):
         """Write flip index JSON."""
         # Convert keys to strings for JSON serialization
         serializable = {str(k): v for k, v in flip_index.items()}
         self.write_json("flip_index.json", serializable, "assets")
 
-    def write_tile_symbols(self, tile_metadata: List[Dict], subdir: str = "assets"):
+    def write_tile_symbols(self, tile_metadata: list[dict], subdir: str = "assets"):
         """
         Write tile symbol definitions for WLA-DX.
 
@@ -87,14 +87,14 @@ class AssetWriter:
 
         self.write_text("tile_symbols.inc", "\n".join(lines), subdir)
 
-    def write_manifest(self, manifest: Dict):
+    def write_manifest(self, manifest: dict):
         """Write conversion manifest."""
         self.write_json("manifest_sms.json", manifest, "work")
 
-    def write_banks(self, banks: Dict):
+    def write_banks(self, banks: dict):
         """Write bank mapping."""
         self.write_json("banks.json", banks, "work")
 
-    def write_symbol_map(self, symbols: List):
+    def write_symbol_map(self, symbols: list):
         """Write symbol map (from disassembler)."""
         self.write_json("symbol_map.json", symbols, "work")

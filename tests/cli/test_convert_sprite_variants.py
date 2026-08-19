@@ -51,7 +51,7 @@ def test_profiled_variant_mapping_resolves_tile_attr_combo():
     )
 
     combo = 0x05  # palette 1 + H flip
-    mapped = result["lookup"][(0, combo)]
+    mapped = result.lookup[(0, combo)]
     assert 0 <= mapped <= 255
-    assert result["variant_map"][0 * 16 + combo] == mapped
-    assert result["profile"]["resolved_variants"][0]["mapped_tile"] == mapped
+    assert result.variant_map[0 * 16 + combo] == mapped
+    assert result.profile["resolved_variants"][0]["mapped_tile"] == mapped

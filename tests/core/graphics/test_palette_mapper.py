@@ -1,11 +1,5 @@
 """Tests for palette mapper."""
 
-import pytest
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
 from nes2sms.core.graphics.palette_mapper import PaletteMapper
 from nes2sms.shared.constants import NES_PALETTE_RGB
 

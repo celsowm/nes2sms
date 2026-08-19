@@ -11,8 +11,12 @@ from ...infrastructure.symbol_extractor import StaticSymbolExtractor
 from ...infrastructure.wla_dx.stub_generator import StubGenerator
 from ...shared.models import Symbol
 from ._convert_graphics import (
-    _apply_profiled_sprite_variants,
-    _build_default_sprite_variant_map,
+    _apply_profiled_sprite_variants as _apply_profiled_sprite_variants,
+)
+from ._convert_graphics import (
+    _build_default_sprite_variant_map as _build_default_sprite_variant_map,
+)
+from ._convert_graphics import (
     capture_runtime_snapshot,
     prepare_graphics_assets,
     write_graphics_assets,
@@ -38,7 +42,8 @@ def cmd_convert(args):
     writer = AssetWriter(out_dir)
     _write_ingested_rom_artifacts(writer, loader)
     print(
-        f"      PRG: {len(loader.prg_data) // 1024}KB | CHR: {len(loader.chr_data) // 1024 if loader.chr_data else 0}KB"
+        f"      PRG: {len(loader.prg_data) // 1024}KB | "
+        f"CHR: {len(loader.chr_data) // 1024 if loader.chr_data else 0}KB"
     )
     print(f"      Mapper: {loader.header.mapper} | Mirroring: {loader.header.mirroring}")
     print()
@@ -115,7 +120,7 @@ def _write_ingested_rom_artifacts(writer: AssetWriter, loader) -> None:
 
 
 def _extract_symbol_dict(loader, writer: AssetWriter) -> dict:
-    symbol_dict = {}
+    symbol_dict: dict = {}
     if not loader.prg_data:
         return symbol_dict
 

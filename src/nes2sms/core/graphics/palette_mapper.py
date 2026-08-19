@@ -1,6 +1,6 @@
 """NES to SMS palette mapping."""
 
-from typing import List, Tuple, Optional
+
 from ...shared.constants import NES_PALETTE_RGB
 
 
@@ -12,7 +12,7 @@ class PaletteMapper:
     SMS: 64 colors (2 bits per channel: %00BBGGRR)
     """
 
-    def __init__(self, nes_palette_ram: Optional[List[int]] = None):
+    def __init__(self, nes_palette_ram: list[int] | None = None):
         """
         Initialize palette mapper.
 
@@ -25,7 +25,7 @@ class PaletteMapper:
             self.nes_palette_ram = nes_palette_ram
 
     @staticmethod
-    def _default_nes_palette() -> List[int]:
+    def _default_nes_palette() -> list[int]:
         """Return default NES palette RAM values."""
         # Background palettes (4 × 4 colors)
         bg = [
@@ -85,7 +85,7 @@ class PaletteMapper:
         return (bb << 4) | (gg << 2) | rr
 
     @staticmethod
-    def sms_color_to_rgb(sms_byte: int) -> Tuple[int, int, int]:
+    def sms_color_to_rgb(sms_byte: int) -> tuple[int, int, int]:
         """
         Convert SMS color byte to RGB tuple.
 
@@ -101,12 +101,12 @@ class PaletteMapper:
         return (rr, gg, bb)
 
     @staticmethod
-    def _rgb_distance(c1: Tuple[int, int, int], c2: Tuple[int, int, int]) -> float:
+    def _rgb_distance(c1: tuple[int, int, int], c2: tuple[int, int, int]) -> float:
         """Calculate Euclidean distance between two RGB colors."""
-        return sum((a - b) ** 2 for a, b in zip(c1, c2))
+        return sum((a - b) ** 2 for a, b in zip(c1, c2, strict=True))
 
     @classmethod
-    def build_nes_to_sms_lookup(cls) -> List[int]:
+    def build_nes_to_sms_lookup(cls) -> list[int]:
         """Build the canonical 64-entry NES-to-SMS color lookup table."""
         return [cls.nes_color_to_sms(index) for index in range(64)]
 
@@ -122,7 +122,7 @@ class PaletteMapper:
         return "\n".join(lines)
 
     @staticmethod
-    def _normalize_bg_palette_ram(palette_ram: List[int]) -> List[int]:
+    def _normalize_bg_palette_ram(palette_ram: list[int]) -> list[int]:
         """Force BG sub-palette entry 0 to use the universal NES backdrop color."""
         normalized = list(palette_ram[:16])
         if not normalized:
@@ -134,7 +134,7 @@ class PaletteMapper:
                 normalized[offset] = backdrop
         return normalized
 
-    def build_sms_palette(self, slot: str = "bg") -> Tuple[bytes, List[List[int]]]:
+    def build_sms_palette(self, slot: str = "bg") -> tuple[bytes, list[list[int]]]:
         """
         Build 16-entry SMS palette from NES palette RAM.
 
@@ -185,7 +185,7 @@ class PaletteMapper:
 
         return bytes(sms_palette), color_maps
 
-    def build_all_palettes(self) -> Tuple[bytes, bytes, List[List[int]]]:
+    def build_all_palettes(self) -> tuple[bytes, bytes, list[list[int]]]:
         """
         Build both BG and SPR palettes.
 

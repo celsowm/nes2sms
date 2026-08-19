@@ -3,9 +3,9 @@
 import json
 from pathlib import Path
 
-from ...infrastructure.wla_dx import WlaDxGenerator, StubGenerator
-from ...infrastructure.asset_writer import AssetWriter
 from ...core.nes import get_mapper_strategy
+from ...infrastructure.asset_writer import AssetWriter
+from ...infrastructure.wla_dx import StubGenerator, WlaDxGenerator
 
 
 def cmd_generate(args):

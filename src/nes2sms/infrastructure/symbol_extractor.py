@@ -1,7 +1,7 @@
 """Static symbol extractor for 6502 PRG ROMs."""
 
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 try:
     from ..shared.models import Symbol
@@ -9,7 +9,7 @@ except ImportError:
     from nes2sms.shared.models import Symbol
 
 if TYPE_CHECKING:
-    from ..core.interfaces.i_disassembler import IDisassembler, DisassemblyDatabase
+    from ..core.interfaces.i_disassembler import DisassemblyDatabase, IDisassembler
 
 
 class StaticSymbolExtractor:
@@ -47,13 +47,13 @@ class StaticSymbolExtractor:
         self.prg_data = prg_data
         self.base_address = base_address
         self.disassembler = disassembler
-        self.symbols: List[Symbol] = []
+        self.symbols: list[Symbol] = []
         self.code_addresses: set = set()
         self.data_addresses: set = set()
         self.visited: set = set()
-        self.disassembly_db: Optional["DisassemblyDatabase"] = None
+        self.disassembly_db: DisassemblyDatabase | None = None
 
-    def extract(self) -> List[Symbol]:
+    def extract(self) -> list[Symbol]:
         """
         Extract symbols from PRG data.
 
@@ -109,15 +109,15 @@ class StaticSymbolExtractor:
         self.symbols.sort(key=lambda s: s.address)
         processed_addresses = set()
         emitted_labels = set()
-        
+
         for symbol in self.symbols:
-            # If this starting address is already covered by a previous snippet, 
+            # If this starting address is already covered by a previous snippet,
             # we don't need to generate a new starting point for it (the label
             # is already embedded in the parent snippet).
             if symbol.address in processed_addresses:
                 symbol.is_embedded = True
                 continue
-                
+
             # Get function instructions
             instructions = self.disassembly_db.get_function_at(symbol.address)
 
@@ -126,7 +126,7 @@ class StaticSymbolExtractor:
                 for instr in instructions:
                     for i in range(instr.size()):
                         processed_addresses.add(instr.address + i)
-                    
+
                 # Convert to assembly text
                 lines = []
                 for instr in instructions:
@@ -135,7 +135,7 @@ class StaticSymbolExtractor:
                     if label and label not in emitted_labels:
                         lines.append(f"{label}:")
                         emitted_labels.add(label)
-                    
+
                     line = instr.to_string()
                     if instr.comment:
                         line += f" ; {instr.comment}"
@@ -284,7 +284,7 @@ class StaticSymbolExtractor:
         Uses precomputed size table for accuracy.
         """
         # Precomputed instruction size table for 6502
-        SIZE_TABLE = bytes(
+        size_table = bytes(
             [
                 1, 2, 0, 0, 2, 2, 2, 0, 1, 2, 1, 0, 3, 3, 3, 0, # 00-0F
                 2, 2, 0, 0, 2, 2, 2, 0, 1, 3, 1, 0, 3, 3, 3, 0, # 10-1F
@@ -306,7 +306,7 @@ class StaticSymbolExtractor:
         )
 
         # Get base size
-        instr_size = SIZE_TABLE[opcode]
+        instr_size = size_table[opcode]
 
         # Handle invalid/illegal opcodes (size 0)
         if instr_size == 0:
@@ -341,7 +341,7 @@ class StaticSymbolExtractor:
         else:
             return -1
 
-    def get_code_ranges(self) -> List[Tuple[int, int]]:
+    def get_code_ranges(self) -> list[tuple[int, int]]:
         """
         Get contiguous code ranges.
 
@@ -367,7 +367,7 @@ class StaticSymbolExtractor:
         ranges.append((start, end))
         return ranges
 
-    def get_data_ranges(self) -> List[Tuple[int, int]]:
+    def get_data_ranges(self) -> list[tuple[int, int]]:
         """
         Get potential data ranges (everything not identified as code).
 
@@ -397,7 +397,7 @@ class StaticSymbolExtractor:
 
         return ranges
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """
         Export symbols to dictionary format.
 
@@ -426,8 +426,8 @@ class StaticSymbolExtractor:
 def extract_symbols_from_prg(
     prg_path: Path,
     base_address: int = 0x8000,
-    output_path: Optional[Path] = None,
-) -> Dict:
+    output_path: Path | None = None,
+) -> dict:
     """
     Convenience function to extract symbols from PRG file.
 
@@ -441,7 +441,7 @@ def extract_symbols_from_prg(
     """
     prg_data = prg_path.read_bytes()
     extractor = StaticSymbolExtractor(prg_data, base_address)
-    symbols = extractor.extract()
+    extractor.extract()
     result = extractor.to_dict()
 
     if output_path:

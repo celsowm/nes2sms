@@ -1,36 +1,37 @@
 """6502 to Z80 instruction translator - Refactored with Strategy Pattern."""
 
-from typing import Dict, List, Optional
-from .parser import InstructionParser, ParsedInstruction, AddressingMode
+
+from ..interfaces.i_translator import ITranslator
+from ..nes.mapper import MapperStrategy
+from ..sms.hal_generator import HALGenerator
+from .parser import InstructionParser, ParsedInstruction
 from .strategies import (
-    TranslationStrategy,
+    ArithmeticLogicStrategy,
+    BitTestStrategy,
+    BranchStrategy,
+    BreakStrategy,
+    CompareRegisterStrategy,
+    FlagStrategy,
+    IncrementDecrementStrategy,
+    JumpStrategy,
+    JumpSubroutineStrategy,
     LoadAccumulatorStrategy,
+    LoadXStrategy,
+    LoadYStrategy,
+    NopStrategy,
+    ReturnInterruptStrategy,
+    ReturnStrategy,
+    ShiftRotateStrategy,
+    StackStrategy,
     StoreAccumulatorStrategy,
     StoreXStrategy,
     StoreYStrategy,
-    LoadXStrategy,
-    LoadYStrategy,
-    JumpStrategy,
-    JumpSubroutineStrategy,
-    ReturnStrategy,
-    ReturnInterruptStrategy,
-    BranchStrategy,
     TransferStrategy,
-    StackStrategy,
-    FlagStrategy,
-    IncrementDecrementStrategy,
-    ArithmeticLogicStrategy,
-    CompareRegisterStrategy,
-    ShiftRotateStrategy,
-    NopStrategy,
-    BreakStrategy,
-    BitTestStrategy,
+    TranslationStrategy,
 )
-from ..sms.hal_generator import HALGenerator
-from ..nes.mapper import MapperStrategy
 
 
-class InstructionTranslator:
+class InstructionTranslator(ITranslator):
     """
     Translates 6502 assembly to Z80 using Strategy Pattern.
 
@@ -44,7 +45,7 @@ class InstructionTranslator:
 
     def __init__(self):
         self.parser = InstructionParser()
-        self.strategies: Dict[str, TranslationStrategy] = {}
+        self.strategies: dict[str, TranslationStrategy] = {}
         self._register_default_strategies()
 
     def _register_default_strategies(self):
@@ -116,7 +117,7 @@ class InstructionTranslator:
         """
         self.strategies[mnemonic.upper()] = strategy
 
-    def translate(self, mnemonic: str, operand: str = "") -> List[str]:
+    def translate(self, mnemonic: str, operand: str = "") -> list[str]:
         """
         Translate a single instruction by mnemonic and operand.
 
@@ -136,7 +137,7 @@ class InstructionTranslator:
 
         return self.translate_parsed(parsed)
 
-    def translate_parsed(self, instruction: ParsedInstruction) -> List[str]:
+    def translate_parsed(self, instruction: ParsedInstruction) -> list[str]:
         """
         Translate a parsed instruction.
 
@@ -154,7 +155,7 @@ class InstructionTranslator:
         # No strategy registered - return TODO
         return [f"    ; TODO: {instruction.mnemonic} {instruction.operand_text or ''}"]
 
-    def translate_line(self, line: str, address: Optional[int] = None) -> str:
+    def translate_line(self, line: str, address: int | None = None) -> str:
         """
         Translate a single line of assembly (legacy API).
 
@@ -184,7 +185,7 @@ class InstructionTranslator:
 
         return "\n".join(z80_lines)
 
-    def translate_block(self, lines: List[str], start_address: int = 0) -> str:
+    def translate_block(self, lines: list[str], start_address: int = 0) -> str:
         """
         Translate a block of assembly lines.
 
@@ -257,7 +258,7 @@ class InstructionTranslator:
                     return 3
             return 1
 
-    def get_supported_instructions(self) -> List[str]:
+    def get_supported_instructions(self) -> list[str]:
         """Get list of supported instruction mnemonics."""
         return sorted(self.strategies.keys())
 
@@ -278,7 +279,7 @@ class InstructionTranslator:
         """
         hal_gen = HALGenerator(split_y=split_y)
         hal_code = hal_gen.generate_all()
-        
+
         mapper_code = "\n".join(mapper_strategy.generate_banking_code())
-        
+
         return f"{hal_code}\n\n; Mapper Routines\n{mapper_code}"

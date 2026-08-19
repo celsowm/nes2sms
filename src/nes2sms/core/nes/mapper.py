@@ -1,7 +1,7 @@
 """NES Mapper strategies for bank mapping to SMS Sega mapper."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict
+from collections.abc import Callable
 
 from ...shared.models import BankMapping
 
@@ -22,7 +22,7 @@ class MapperStrategy(ABC):
         pass
 
     @abstractmethod
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         """
         Map NES PRG banks to SMS Sega mapper slots.
 
@@ -35,11 +35,11 @@ class MapperStrategy(ABC):
         pass
 
     @abstractmethod
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         """Generate Z80 routine for handles mapper-specific bank switching."""
         pass
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         """Return any warnings about this mapper."""
         return []
 
@@ -55,10 +55,10 @@ class NROMMapper(MapperStrategy):
     def name(self) -> str:
         return "NROM"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [BankMapping(sms_bank=i, nes_bank=i, fixed=True) for i in range(prg_banks)]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return ["; NROM has no banking"]
 
 
@@ -73,10 +73,10 @@ class CNROMMapper(MapperStrategy):
     def name(self) -> str:
         return "CNROM"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [BankMapping(sms_bank=i, nes_bank=i, fixed=True) for i in range(prg_banks)]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return ["; CNROM has no PRG banking (CHR banking only)"]
 
 
@@ -91,13 +91,13 @@ class UxROMMapper(MapperStrategy):
     def name(self) -> str:
         return "UxROM"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [
             BankMapping(sms_bank=i, nes_bank=i, fixed=(i == prg_banks - 1))
             for i in range(prg_banks)
         ]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return [
             "hal_uxrom_switch:",
             "    ; UxROM switch: Write to ROM area selects bank 0-7 at $8000",
@@ -117,13 +117,13 @@ class MMC1Mapper(MapperStrategy):
     def name(self) -> str:
         return "MMC1"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [
             BankMapping(sms_bank=i, nes_bank=i, fixed=(i == prg_banks - 1))
             for i in range(prg_banks)
         ]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return [
             "hal_mmc1_switch:",
             "    ; MMC1 serial switch emulation",
@@ -148,10 +148,10 @@ class MMC3Mapper(MapperStrategy):
     def name(self) -> str:
         return "MMC3"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [BankMapping(sms_bank=i, nes_bank=i, fixed=False) for i in range(prg_banks)]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return [
             "hal_mmc3_switch:",
             "    ; MMC3 complex bank switch",
@@ -159,7 +159,7 @@ class MMC3Mapper(MapperStrategy):
             "    ret"
         ]
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         return [
             "MMC3 bank switching requires advanced Z80 interrupt translations. "
             "Manual intervention may be needed."
@@ -180,13 +180,13 @@ class UnsupportedMapper(MapperStrategy):
     def name(self) -> str:
         return f"Unsupported (mapper {self._mapper_id})"
 
-    def map_banks(self, prg_banks: int) -> List[BankMapping]:
+    def map_banks(self, prg_banks: int) -> list[BankMapping]:
         return [BankMapping(sms_bank=i, nes_bank=i, fixed=False) for i in range(prg_banks)]
 
-    def generate_banking_code(self) -> List[str]:
+    def generate_banking_code(self) -> list[str]:
         return [f"; Unsupported mapper {self._mapper_id}"]
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         return [
             f"Unsupported mapper {self._mapper_id}. "
             f"Generated flat export - manual intervention required."
@@ -194,7 +194,7 @@ class UnsupportedMapper(MapperStrategy):
 
 
 # Mapper registry
-_MAPPER_REGISTRY = {
+_MAPPER_REGISTRY: dict[int, Callable[[], MapperStrategy]] = {
     0: NROMMapper,
     1: MMC1Mapper,
     2: UxROMMapper,
@@ -213,5 +213,7 @@ def get_mapper_strategy(mapper_id: int) -> MapperStrategy:
     Returns:
         MapperStrategy instance
     """
-    cls = _MAPPER_REGISTRY.get(mapper_id, UnsupportedMapper)
-    return cls(mapper_id) if cls == UnsupportedMapper else cls()
+    cls = _MAPPER_REGISTRY.get(mapper_id)
+    if cls is None:
+        return UnsupportedMapper(mapper_id)
+    return cls()

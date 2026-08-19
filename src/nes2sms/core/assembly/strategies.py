@@ -1,9 +1,9 @@
 """Z80 code generation strategies for 6502 instructions."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
-from .parser import ParsedInstruction, AddressingMode
+
 from .hardware_interceptor import HardwareInterceptorRegistry
+from .parser import AddressingMode, ParsedInstruction
 
 # Central registry for hardware redirection
 _INTERCEPTOR = HardwareInterceptorRegistry()
@@ -42,7 +42,7 @@ def _hex_paren(val: int, bits: int = 16) -> str:
     return f"({_hex16h(val)})"
 
 
-def _normalize_hex(text: Optional[str]) -> str:
+def _normalize_hex(text: str | None) -> str:
     """Convert 6502 hex format ($XX or $XXXX) to WLA-DX format (XXh or XXXXh).
 
     Also handles malformed addresses like $009D which should be $9D (zero page).
@@ -62,7 +62,7 @@ def _normalize_hex(text: Optional[str]) -> str:
     return text
 
 
-def _normalize_hex_paren(text: Optional[str], force_paren: bool = False) -> str:
+def _normalize_hex_paren(text: str | None, force_paren: bool = False) -> str:
     """Convert 6502 hex in parentheses to WLA-DX format.
 
     Args:
@@ -71,8 +71,6 @@ def _normalize_hex_paren(text: Optional[str], force_paren: bool = False) -> str:
     """
     if not text:
         return text or ""
-
-    original = text
 
     if text.startswith("(") and text.endswith(")"):
         inner = text[1:-1]
@@ -92,7 +90,7 @@ class TranslationStrategy(ABC):
     """
 
     @abstractmethod
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         """
         Translate instruction to Z80 assembly.
 
@@ -108,7 +106,7 @@ class TranslationStrategy(ABC):
 class LoadAccumulatorStrategy(TranslationStrategy):
     """Translation strategy for LDA instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mode = instruction.addressing_mode
         addr_val = instruction.operand_value
 
@@ -165,7 +163,7 @@ class LoadAccumulatorStrategy(TranslationStrategy):
 class StoreAccumulatorStrategy(TranslationStrategy):
     """Translation strategy for STA instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mode = instruction.addressing_mode
         addr_val = instruction.operand_value or 0
 
@@ -215,7 +213,7 @@ class StoreAccumulatorStrategy(TranslationStrategy):
 class StoreXStrategy(TranslationStrategy):
     """Translation strategy for STX instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mode = instruction.addressing_mode
         val = instruction.operand_value
 
@@ -255,7 +253,7 @@ class StoreXStrategy(TranslationStrategy):
 class StoreYStrategy(TranslationStrategy):
     """Translation strategy for STY instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mode = instruction.addressing_mode
         val = instruction.operand_value or 0
 
@@ -288,7 +286,7 @@ class StoreYStrategy(TranslationStrategy):
 class LoadXStrategy(TranslationStrategy):
     """Translation strategy for LDX instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         val = instruction.operand_value or 0
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
             return [f"    LD   b, ${_hex8h(val)}"]
@@ -316,7 +314,7 @@ class LoadXStrategy(TranslationStrategy):
 class LoadYStrategy(TranslationStrategy):
     """Translation strategy for LDY instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         val = instruction.operand_value or 0
         if instruction.addressing_mode == AddressingMode.IMMEDIATE:
             return [f"    LD   c, ${_hex8h(val)}"]
@@ -344,28 +342,28 @@ class LoadYStrategy(TranslationStrategy):
 class JumpStrategy(TranslationStrategy):
     """Translation strategy for JMP instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return [f"    JP   {instruction.operand_text}"]
 
 
 class JumpSubroutineStrategy(TranslationStrategy):
     """Translation strategy for JSR instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return [f"    CALL {instruction.operand_text}"]
 
 
 class ReturnStrategy(TranslationStrategy):
     """Translation strategy for RTS instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return ["    RET"]
 
 
 class ReturnInterruptStrategy(TranslationStrategy):
     """Translation strategy for RTI instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return ["    EI", "    RETI"]
 
 
@@ -383,7 +381,7 @@ class BranchStrategy(TranslationStrategy):
         "BVS": "PE",
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         condition = self.CONDITION_MAP.get(instruction.mnemonic, "NZ")
         target = _normalize_hex(instruction.operand_text)
         return [f"    JP   {condition}, {target}"]
@@ -401,7 +399,7 @@ class TransferStrategy(TranslationStrategy):
         "TXS": ["    ; TXS: X→SP - use LD SP, HL after loading X to H"],
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return self.TRANSFER_MAP.get(instruction.mnemonic, ["    ; TODO"])
 
 
@@ -415,7 +413,7 @@ class StackStrategy(TranslationStrategy):
         "PLP": ["    POP  AF"],
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return self.STACK_MAP.get(instruction.mnemonic, ["    ; TODO"])
 
 
@@ -432,7 +430,7 @@ class FlagStrategy(TranslationStrategy):
         "SED": ["    ; SED - Z80 DAA different"],
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return self.FLAG_MAP.get(instruction.mnemonic, ["    ; TODO"])
 
 
@@ -446,7 +444,7 @@ class IncrementDecrementStrategy(TranslationStrategy):
         "DEY": "C",
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mnemonic = instruction.mnemonic
 
         # Register operations
@@ -457,7 +455,7 @@ class IncrementDecrementStrategy(TranslationStrategy):
 
         # Memory operations
         if instruction.addressing_mode == AddressingMode.IMPLIED:
-            return [f"    INC  A" if mnemonic == "INC" else f"    DEC  A"]
+            return ["    INC  A" if mnemonic == "INC" else "    DEC  A"]
         elif instruction.addressing_mode == AddressingMode.ABSOLUTE:
             op = "INC" if mnemonic == "INC" else "DEC"
             addr_val = instruction.operand_value or 0
@@ -488,7 +486,7 @@ class ArithmeticLogicStrategy(TranslationStrategy):
         "SUB": "SUB",
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mnemonic = instruction.mnemonic
         z80_op = self.OPCODE_MAP.get(mnemonic)
 
@@ -527,7 +525,7 @@ class ArithmeticLogicStrategy(TranslationStrategy):
 class CompareRegisterStrategy(TranslationStrategy):
     """Translation strategy for CPX/CPY instructions."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mnemonic = instruction.mnemonic
         reg = "B" if mnemonic == "CPX" else "C"
         addr_val = instruction.operand_value or 0
@@ -581,7 +579,7 @@ class ShiftRotateStrategy(TranslationStrategy):
         "ROR": "RR",
     }
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         mnemonic = instruction.mnemonic
 
         if instruction.addressing_mode == AddressingMode.IMPLIED:
@@ -633,14 +631,14 @@ class ShiftRotateStrategy(TranslationStrategy):
 class NopStrategy(TranslationStrategy):
     """Translation strategy for NOP instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         return ["    NOP"]
 
 
 class BreakStrategy(TranslationStrategy):
     """Translation strategy for BRK instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         # Phase 1 fallback: treat BRK as a soft-abort path and return.
         return ["    RET"]
 
@@ -648,7 +646,7 @@ class BreakStrategy(TranslationStrategy):
 class BitTestStrategy(TranslationStrategy):
     """Translation strategy for BIT instruction."""
 
-    def translate(self, instruction: ParsedInstruction) -> List[str]:
+    def translate(self, instruction: ParsedInstruction) -> list[str]:
         addr_val = instruction.operand_value
         if addr_val is not None:
             # Check for hardware interception (e.g., $2002)

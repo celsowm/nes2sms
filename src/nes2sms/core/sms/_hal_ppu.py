@@ -572,6 +572,6 @@ _ppu_set_vdp_increment:
 
 ; NES palette index (0-63) -> SMS color (--BBGGRR)
 _nes_to_sms_color:
-    ;      0     1     2     3     4     5     6     7     8     9     A     B     C     D     E     F
+    ;  palette column index:  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
 {palette_lookup_asm}
 """

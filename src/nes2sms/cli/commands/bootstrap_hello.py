@@ -10,15 +10,29 @@ from types import SimpleNamespace
 from ...infrastructure.rom_loader import RomLoader
 from ._bootstrap_hello_assets import (
     HELLO_WORLD_WLA_6502_ASM,
+)
+from ._bootstrap_hello_assets import (
     build_hello_world_chr as _build_hello_world_chr_impl,
+)
+from ._bootstrap_hello_assets import (
     build_ines_header as _build_ines_header_impl,
 )
 from ._bootstrap_tooling import (
     compile_prg as _compile_prg_impl,
+)
+from ._bootstrap_tooling import (
     find_wla_toolchain as _find_wla_toolchain_impl,
+)
+from ._bootstrap_tooling import (
     format_process_log as _format_process_log_impl,
+)
+from ._bootstrap_tooling import (
     resolve_blastem as _resolve_blastem_impl,
+)
+from ._bootstrap_tooling import (
     resolve_fceux as _resolve_fceux_impl,
+)
+from ._bootstrap_tooling import (
     select_fceux_release_asset as _select_fceux_release_asset_impl,
 )
 from .convert import cmd_convert
@@ -130,6 +144,8 @@ def _compile_prg(nes_dir: Path, logs_dir: Path, wla_6502: Path, wlalink: Path) -
 
 def _validate_nes_rom(rom_path: Path) -> None:
     loader = RomLoader().load(rom_path)
+    if loader.header is None:
+        raise RuntimeError("Unable to parse NES header from generated ROM.")
     if loader.header.mapper != 0:
         raise RuntimeError(f"Expected mapper 0, got mapper {loader.header.mapper}")
     if loader.header.prg_banks != 1:
@@ -161,7 +177,9 @@ def _build_hello_nes_rom(nes_dir: Path, prg_path: Path) -> Path:
     return nes_rom_path
 
 
-def _resolve_requested_emulators(args, project_root: Path, run_emulators: bool) -> tuple[Path | None, Path | None]:
+def _resolve_requested_emulators(
+    args, project_root: Path, run_emulators: bool
+) -> tuple[Path | None, Path | None]:
     if not run_emulators:
         return None, None
     sms_emulator = resolve_blastem(

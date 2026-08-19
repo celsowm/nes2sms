@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Sequence, Tuple
 
 from ...shared.constants import NES_PALETTE_RGB
 from .runtime_capture import RuntimeGraphicsCapture
-
 
 NES_FRAME_WIDTH = 256
 NES_FRAME_HEIGHT = 240
@@ -26,7 +25,7 @@ class RawReferenceFrame:
     has_useful_nametable: bool
     nonzero_nametable_bytes: int
     sprite_count: int
-    background_rgb: Tuple[int, int, int]
+    background_rgb: tuple[int, int, int]
 
 
 def render_raw_reference_frame(
@@ -59,7 +58,9 @@ def render_raw_reference_frame(
     )
 
 
-def summarize_rgba_frame(width: int, height: int, rgba: bytes, *, top_count: int = 5) -> Dict[str, object]:
+def summarize_rgba_frame(
+    width: int, height: int, rgba: bytes, *, top_count: int = 5
+) -> dict[str, object]:
     """Build the same high-level metrics used by screenshot-based comparison."""
     pixels = [tuple(rgba[index : index + 3]) for index in range(0, len(rgba), 4)]
     top_left = pixels[0] if pixels else (0, 0, 0)
@@ -79,7 +80,7 @@ def summarize_rgba_frame(width: int, height: int, rgba: bytes, *, top_count: int
     }
 
 
-def build_raw_reference_report(frame: RawReferenceFrame) -> Dict[str, object]:
+def build_raw_reference_report(frame: RawReferenceFrame) -> dict[str, object]:
     """Return a JSON-serializable report for a rendered raw reference frame."""
     metrics = summarize_rgba_frame(frame.width, frame.height, frame.rgba)
     return {
@@ -97,7 +98,7 @@ def _render_background(
     capture: RuntimeGraphicsCapture,
     chr_data: bytes,
     rgba: bytearray,
-    bg_opaque: List[bool],
+    bg_opaque: list[bool],
 ) -> None:
     pattern_base = 0x1000 if (capture.ppuctrl & 0x10) else 0x0000
     fine_x = capture.scroll_x & 0x07
@@ -118,7 +119,9 @@ def _render_background(
 
             tile_index = _read_nametable_tile(capture, nt_index, tile_row, tile_col)
             palette_id = _read_attribute_palette(capture, nt_index, tile_row, tile_col)
-            color_index = _read_pattern_pixel(chr_data, pattern_base, tile_index, fine_row, fine_col)
+            color_index = _read_pattern_pixel(
+                chr_data, pattern_base, tile_index, fine_row, fine_col
+            )
             if color_index == 0:
                 continue
 
@@ -217,19 +220,23 @@ def _read_pattern_pixel(
     return (bit1 << 1) | bit0
 
 
-def _resolve_bg_rgb(palette_ram: Sequence[int], palette_id: int, color_index: int) -> Tuple[int, int, int]:
+def _resolve_bg_rgb(
+    palette_ram: Sequence[int], palette_id: int, color_index: int
+) -> tuple[int, int, int]:
     if color_index == 0:
         return _resolve_nes_rgb(palette_ram[0])
     palette_offset = (palette_id & 0x03) * 4
     return _resolve_nes_rgb(palette_ram[palette_offset + color_index])
 
 
-def _resolve_sprite_rgb(palette_ram: Sequence[int], palette_id: int, color_index: int) -> Tuple[int, int, int]:
+def _resolve_sprite_rgb(
+    palette_ram: Sequence[int], palette_id: int, color_index: int
+) -> tuple[int, int, int]:
     palette_offset = 16 + ((palette_id & 0x03) * 4)
     return _resolve_nes_rgb(palette_ram[palette_offset + color_index])
 
 
-def _resolve_nes_rgb(color_index: int) -> Tuple[int, int, int]:
+def _resolve_nes_rgb(color_index: int) -> tuple[int, int, int]:
     rgb = NES_PALETTE_RGB[int(color_index) & 0x3F]
     return int(rgb[0]), int(rgb[1]), int(rgb[2])
 
@@ -249,7 +256,9 @@ def _read_nametable_tile(capture: RuntimeGraphicsCapture, nt_index: int, row: in
     return capture.ppu_vram[offset] & 0xFF
 
 
-def _read_attribute_palette(capture: RuntimeGraphicsCapture, nt_index: int, row: int, col: int) -> int:
+def _read_attribute_palette(
+    capture: RuntimeGraphicsCapture, nt_index: int, row: int, col: int
+) -> int:
     physical_nt = _resolve_physical_nametable(nt_index, capture.mirroring)
     attr_offset = (physical_nt * 0x400) + 0x3C0 + (((row % 30) // 4) * 8) + ((col % 32) // 4)
     attr = capture.ppu_vram[attr_offset] & 0xFF

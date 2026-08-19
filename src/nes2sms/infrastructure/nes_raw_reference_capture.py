@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from ..core.graphics.raw_reference_renderer import (
     build_raw_reference_report,
@@ -24,12 +23,14 @@ class NesRawReferenceCaptureConfig:
     output_dir: Path
     capture_frame: int = 120
     timeout_seconds: int = 30
-    emulator_path: Optional[str] = None
+    emulator_path: str | None = None
 
 
 def capture_raw_reference_frame(config: NesRawReferenceCaptureConfig) -> tuple[Path, Path]:
     """Capture runtime state, render a raw NES reference frame, and persist report artifacts."""
     loader = RomLoader().load(config.nes_path)
+    if loader.header is None:
+        raise RuntimeError("Unable to parse NES header for reference capture.")
     runtime_capture = capture_runtime_graphics(
         FceuxRuntimeCaptureConfig(
             nes_path=config.nes_path,

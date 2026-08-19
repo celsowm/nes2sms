@@ -1,11 +1,10 @@
 """Control flow analyzer for 6502 code."""
 
-from typing import List, Dict, Set, Optional
 
 from ..interfaces.i_control_flow_analyzer import (
-    IControlFlowAnalyzer,
-    ControlFlowGraph,
     BasicBlock,
+    ControlFlowGraph,
+    IControlFlowAnalyzer,
     LoopInfo,
     SubroutineInfo,
 )
@@ -32,7 +31,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
     # All flow control instructions
     FLOW_CONTROL = BRANCH_INSTRUCTIONS | JUMP_INSTRUCTIONS | RETURN_INSTRUCTIONS
 
-    def analyze(self, instructions: List[ParsedInstruction]) -> ControlFlowGraph:
+    def analyze(self, instructions: list[ParsedInstruction]) -> ControlFlowGraph:
         """
         Build control flow graph from instructions.
 
@@ -65,7 +64,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
 
         return cfg
 
-    def _build_basic_blocks(self, instructions: List[ParsedInstruction]) -> List[BasicBlock]:
+    def _build_basic_blocks(self, instructions: list[ParsedInstruction]) -> list[BasicBlock]:
         """
         Build basic blocks from instructions.
 
@@ -78,7 +77,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
             return []
 
         # Find block boundaries
-        boundaries: Set[int] = set()
+        boundaries: set[int] = set()
 
         # First instruction is always a boundary
         boundaries.add(instructions[0].address)
@@ -97,8 +96,8 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
                 boundaries.add(next_addr)
 
         # Build blocks
-        blocks: List[BasicBlock] = []
-        current_block: Optional[BasicBlock] = None
+        blocks: list[BasicBlock] = []
+        current_block: BasicBlock | None = None
 
         for instr in sorted(instructions, key=lambda i: i.address):
             if instr.address in boundaries:
@@ -122,7 +121,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
 
         return blocks
 
-    def _build_cfg_links(self, blocks: List[BasicBlock]):
+    def _build_cfg_links(self, blocks: list[BasicBlock]):
         """Build predecessor/successor links between blocks."""
         # Create address -> block map
         block_map = {b.start_addr: b for b in blocks}
@@ -171,7 +170,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
                     block.successors.append(next_block.start_addr)
                     next_block.predecessors.append(block.start_addr)
 
-    def _parse_target(self, operand: str) -> Optional[int]:
+    def _parse_target(self, operand: str) -> int | None:
         """
         Parse branch/jump target from operand.
 
@@ -205,9 +204,9 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
 
     def _find_entry_points(
         self,
-        blocks: List[BasicBlock],
-        instructions: List[ParsedInstruction],
-    ) -> List[int]:
+        blocks: list[BasicBlock],
+        instructions: list[ParsedInstruction],
+    ) -> list[int]:
         """
         Find function entry points.
 
@@ -215,7 +214,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
         - First instruction
         - Targets of JSR instructions
         """
-        entries: Set[int] = set()
+        entries: set[int] = set()
 
         # First instruction
         if instructions:
@@ -230,7 +229,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
 
         return sorted(entries)
 
-    def identify_loops(self, cfg: ControlFlowGraph) -> List[LoopInfo]:
+    def identify_loops(self, cfg: ControlFlowGraph) -> list[LoopInfo]:
         """
         Identify loops in control flow graph.
 
@@ -238,7 +237,7 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
         - A back edge goes from a node to one of its dominators
         - The target of the back edge is the loop header
         """
-        loops: List[LoopInfo] = []
+        loops: list[LoopInfo] = []
 
         for block in cfg.get_ordered_blocks():
             # Check if block has back edge (successor <= block start)
@@ -264,13 +263,13 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
 
         return loops
 
-    def identify_subroutines(self, cfg: ControlFlowGraph) -> Dict[int, SubroutineInfo]:
+    def identify_subroutines(self, cfg: ControlFlowGraph) -> dict[int, SubroutineInfo]:
         """
         Identify subroutines in control flow graph.
 
         Subroutines start at entry points and end at RTS/RTI.
         """
-        subroutines: Dict[int, SubroutineInfo] = {}
+        subroutines: dict[int, SubroutineInfo] = {}
 
         for entry_addr in cfg.entry_points:
             block = cfg.get_block_by_entry(entry_addr)
@@ -278,11 +277,11 @@ class ControlFlowAnalyzer(IControlFlowAnalyzer):
                 continue
 
             # Collect all blocks in this subroutine
-            visited: Set[int] = set()
+            visited: set[int] = set()
             queue = [entry_addr]
-            subroutine_blocks: List[int] = []
-            exit_addrs: List[int] = []
-            jsr_addrs: List[int] = []
+            subroutine_blocks: list[int] = []
+            exit_addrs: list[int] = []
+            jsr_addrs: list[int] = []
 
             while queue:
                 addr = queue.pop(0)

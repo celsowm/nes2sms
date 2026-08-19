@@ -2,17 +2,16 @@
 
 import argparse
 import sys
-from pathlib import Path
 
-from .commands.ingest import cmd_ingest
 from .commands.analyze_mapper import cmd_analyze_mapper
-from .commands.convert_gfx import cmd_convert_gfx
-from .commands.convert_audio import cmd_convert_audio
-from .commands.generate import cmd_generate
-from .commands.build import cmd_build
-from .commands.translate_asm import cmd_translate_asm
-from .commands.convert import cmd_convert
 from .commands.bootstrap_hello import cmd_bootstrap_hello
+from .commands.build import cmd_build
+from .commands.convert import cmd_convert
+from .commands.convert_audio import cmd_convert_audio
+from .commands.convert_gfx import cmd_convert_gfx
+from .commands.generate import cmd_generate
+from .commands.ingest import cmd_ingest
+from .commands.translate_asm import cmd_translate_asm
 
 
 def main():
@@ -44,7 +43,8 @@ def main():
         "--graphics-source",
         default="runtime",
         choices=["runtime", "static", "hybrid"],
-        help="Graphics source: runtime capture, legacy static heuristics, or runtime with static fallback",
+        help="Graphics source: runtime capture, legacy static heuristics, "
+        "or runtime with static fallback",
     )
     p_convert.add_argument(
         "--capture-frame",

@@ -1,7 +1,6 @@
 """NES iNES/NES2.0 header parser."""
 
 import struct
-from typing import Tuple, Dict, Any
 
 from ...shared.constants import INES_MAGIC
 from ...shared.models import NesHeader
@@ -96,7 +95,7 @@ def parse_ines_header(data: bytes) -> NesHeader:
     )
 
 
-def extract_sections(data: bytes, hdr: NesHeader) -> Tuple[bytes, bytes, bytes]:
+def extract_sections(data: bytes, hdr: NesHeader) -> tuple[bytes, bytes, bytes]:
     """
     Extract PRG, CHR, and trainer data from ROM.
 
@@ -126,7 +125,7 @@ def extract_sections(data: bytes, hdr: NesHeader) -> Tuple[bytes, bytes, bytes]:
     return prg_data, chr_data, trainer_data
 
 
-def read_vectors(prg: bytes) -> Dict[str, str]:
+def read_vectors(prg: bytes) -> dict[str, str]:
     """
     Read interrupt vectors from last 6 bytes of PRG.
 

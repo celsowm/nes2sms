@@ -1,6 +1,5 @@
 """Extract palette data written to NES PPU from PRG ROM code."""
 
-from typing import List, Optional
 
 
 class PaletteExtractor:
@@ -17,7 +16,7 @@ class PaletteExtractor:
         self.prg_data = prg_data
         self.base_address = base_address
 
-    def extract_palette(self) -> Optional[List[int]]:
+    def extract_palette(self) -> list[int] | None:
         """
         Extract NES palette colors from PRG code.
 

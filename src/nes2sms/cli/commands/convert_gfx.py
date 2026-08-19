@@ -2,9 +2,8 @@
 
 import json
 from pathlib import Path
-from typing import List, Tuple
 
-from ...core.graphics import TileConverter, PaletteMapper
+from ...core.graphics import PaletteMapper, TileConverter
 from ...infrastructure.asset_writer import AssetWriter
 
 
@@ -72,7 +71,7 @@ def cmd_convert_gfx(args):
         print(f"[convert-gfx] Multi-bank mode: {len(chr_banks)} banks processed")
 
 
-def _extract_chr_banks(chr_data: bytes, banks_config: dict) -> List[Tuple[int, bytes]]:
+def _extract_chr_banks(chr_data: bytes, banks_config: dict) -> list[tuple[int, bytes]]:
     """
     Extract CHR banks from CHR data based on bank configuration.
 

@@ -1,9 +1,9 @@
 """Disassembler infrastructure module."""
 
-from .da65_wrapper import Da65Wrapper
 from .da65_output_parser import Da65OutputParser
-from .info_file_generator import InfoFileGenerator
+from .da65_wrapper import Da65Wrapper
 from .disassembler import Da65Disassembler
+from .info_file_generator import InfoFileGenerator
 
 __all__ = [
     "Da65Wrapper",

@@ -164,7 +164,7 @@ LoadPalettes:
     ld   hl, PaletteBG
     ld   bc, 16
     call VDP_CopyBytes
-    
+
     ; Load Sprite palette
     ld   hl, $C010
     call VDP_SetWriteAddress

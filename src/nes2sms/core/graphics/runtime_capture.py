@@ -1,8 +1,7 @@
 """Runtime graphics snapshot parsing and visible-grid helpers."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, List, Sequence, Tuple
-
 
 VISIBLE_COLS = 32
 VISIBLE_ROWS = 28
@@ -17,15 +16,15 @@ class RuntimeGraphicsCapture:
     scroll_y: int
     ppuctrl: int
     mirroring: str
-    palette_ram: List[int]
-    ppu_vram: List[int]
-    oam: List[int]
+    palette_ram: list[int]
+    ppu_vram: list[int]
+    oam: list[int]
     visible_rows: int = VISIBLE_ROWS
     visible_cols: int = VISIBLE_COLS
     source: str = "fceux_lua"
 
     @classmethod
-    def from_dict(cls, payload: Dict) -> "RuntimeGraphicsCapture":
+    def from_dict(cls, payload: dict) -> "RuntimeGraphicsCapture":
         """Validate and build a runtime capture object from decoded JSON."""
         required = (
             "frame",
@@ -66,7 +65,7 @@ class RuntimeGraphicsCapture:
         )
 
 
-def assess_runtime_capture(capture: "RuntimeGraphicsCapture") -> Tuple[bool, str]:
+def assess_runtime_capture(capture: "RuntimeGraphicsCapture") -> tuple[bool, str]:
     """Return whether a runtime snapshot is usable as a startup graphics source."""
     nonzero_vram = sum(1 for value in capture.ppu_vram if value)
     nondefault_palette = sum(1 for value in capture.palette_ram if value != 0x0F)
@@ -77,9 +76,9 @@ def assess_runtime_capture(capture: "RuntimeGraphicsCapture") -> Tuple[bool, str
     return True, ""
 
 
-def sprites_from_runtime_oam(oam_bytes: Sequence[int]) -> List[Dict[str, int]]:
+def sprites_from_runtime_oam(oam_bytes: Sequence[int]) -> list[dict[str, int]]:
     """Convert captured OAM bytes into NES-style sprite dictionaries."""
-    sprites: List[Dict[str, int]] = []
+    sprites: list[dict[str, int]] = []
     for base in range(0, min(len(oam_bytes), 256), 4):
         y = int(oam_bytes[base]) & 0xFF
         tile = int(oam_bytes[base + 1]) & 0xFF
@@ -96,17 +95,17 @@ def extract_visible_tile_and_palette_grids(
     *,
     rows: int = VISIBLE_ROWS,
     cols: int = VISIBLE_COLS,
-) -> Tuple[List[List[int]], List[List[int]]]:
+) -> tuple[list[list[int]], list[list[int]]]:
     """Resolve the visible nametable tiles and 2-bit palette IDs from captured VRAM."""
     base_nt = capture.ppuctrl & 0x03
     coarse_x = (capture.scroll_x // 8) & 0x1F
     coarse_y = (capture.scroll_y // 8) & 0x1F
-    tile_grid: List[List[int]] = []
-    palette_grid: List[List[int]] = []
+    tile_grid: list[list[int]] = []
+    palette_grid: list[list[int]] = []
 
     for row in range(rows):
-        tile_row: List[int] = []
-        palette_row: List[int] = []
+        tile_row: list[int] = []
+        palette_row: list[int] = []
         for col in range(cols):
             virtual_col = coarse_x + col
             virtual_row = coarse_y + row

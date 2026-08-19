@@ -4,6 +4,7 @@ from nes2sms.core.graphics.runtime_asset_builder import (
     build_blank_sat,
     build_blank_tilemap,
     build_runtime_background_assets,
+    build_sms_tilemap_bytes,
 )
 from nes2sms.core.graphics.runtime_capture import (
     RuntimeGraphicsCapture,
@@ -38,7 +39,7 @@ def test_runtime_capture_requires_all_required_fields():
 
     try:
         RuntimeGraphicsCapture.from_dict(payload)
-        assert False, "Expected missing-field validation to raise"
+        raise AssertionError("Expected missing-field validation to raise")
     except ValueError as exc:
         assert "oam" in str(exc)
 
@@ -49,7 +50,7 @@ def test_runtime_capture_validates_payload_lengths():
 
     try:
         RuntimeGraphicsCapture.from_dict(payload)
-        assert False, "Expected palette length validation to raise"
+        raise AssertionError("Expected palette length validation to raise")
     except ValueError as exc:
         assert "32 palette bytes" in str(exc)
 
@@ -95,10 +96,15 @@ def test_blank_tilemap_and_sat_are_always_nonempty():
     sat_y, sat_xt = build_blank_sat()
 
     assert len(tilemap) == 16
-    assert tilemap[:4] == bytes([3, 0x00, 3, 0x00])
-    assert tilemap[-4:] == bytes([3, 0x10, 3, 0x10])
+    assert tilemap == bytes([3, 0x00]) * 8
     assert sat_y == bytes([0xD0])
     assert sat_xt == bytes([0x00, 0x00])
+
+
+def test_sms_tilemap_bytes_encodes_attr_from_tile_high_bit():
+    grid = [[0x01, 0x0101, 0x0100]]
+    tilemap = build_sms_tilemap_bytes(grid)
+    assert tilemap == bytes([0x01, 0x00, 0x01, 0x01, 0x00, 0x01])
 
 
 def test_runtime_background_builder_materializes_palette_variants_into_blank_slots():
@@ -129,9 +135,9 @@ def test_runtime_background_builder_materializes_palette_variants_into_blank_slo
         cols=1,
     )
 
-    mapped = result["variant_lookup"][(1, 2)]
+    mapped = result.variant_lookup[(1, 2)]
     assert mapped != 1
-    assert result["tilemap"] == bytes([mapped, 0x10])
+    assert result.tilemap == bytes([mapped, 0x00])
     assert tile_result.sms_tiles[mapped] != tile_result.sms_tiles[1]
 
 

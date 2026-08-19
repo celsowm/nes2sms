@@ -1,11 +1,10 @@
 """Native 6502 disassembler - doesn't require external tools."""
 
-from typing import Dict, List, Tuple, Optional
 
 from ...core.interfaces.i_disassembler import (
-    IDisassembler,
-    DisassemblyResult,
     DisassemblyDatabase,
+    DisassemblyResult,
+    IDisassembler,
     ParsedInstruction,
 )
 
@@ -214,13 +213,19 @@ class Native6502Disassembler(IDisassembler):
     INDIRECT_X_OPCODES = {0x01, 0x21, 0x41, 0x61, 0x81, 0xA1, 0xC1, 0xE1}
 
     # Opcodes that use zero-page,X addressing
-    ZP_X_OPCODES = {0x15, 0x16, 0x35, 0x36, 0x55, 0x56, 0x75, 0x76, 0x95, 0x94, 0xB4, 0xB5, 0xD5, 0xD6, 0xF5, 0xF6}
+    ZP_X_OPCODES = {
+        0x15, 0x16, 0x35, 0x36, 0x55, 0x56, 0x75, 0x76,
+        0x95, 0x94, 0xB4, 0xB5, 0xD5, 0xD6, 0xF5, 0xF6,
+    }
 
     # Opcodes that use zero-page,Y addressing
     ZP_Y_OPCODES = {0x96, 0xB6}
 
     # Opcodes that use absolute,X addressing
-    ABS_X_OPCODES = {0x1D, 0x1E, 0x3D, 0x3E, 0x5D, 0x5E, 0x7D, 0x7E, 0x9D, 0xBC, 0xBD, 0xDD, 0xDE, 0xFD, 0xFE}
+    ABS_X_OPCODES = {
+        0x1D, 0x1E, 0x3D, 0x3E, 0x5D, 0x5E, 0x7D, 0x7E,
+        0x9D, 0xBC, 0xBD, 0xDD, 0xDE, 0xFD, 0xFE,
+    }
 
     # Opcodes that use absolute,Y addressing
     ABS_Y_OPCODES = {0x19, 0x39, 0x59, 0x79, 0x99, 0xB9, 0xBE, 0xD9, 0xF9}
@@ -240,9 +245,9 @@ class Native6502Disassembler(IDisassembler):
         self,
         prg_data: bytes,
         start_addr: int = 0x8000,
-        cpu: Optional[str] = None,
-        labels: Optional[Dict[int, str]] = None,
-        code_ranges: Optional[List[Tuple[int, int]]] = None,
+        cpu: str | None = None,
+        labels: dict[int, str] | None = None,
+        code_ranges: list[tuple[int, int]] | None = None,
     ) -> DisassemblyResult:
         """
         Disassemble PRG data using native disassembler.
@@ -261,14 +266,14 @@ class Native6502Disassembler(IDisassembler):
 
         # Add labels if provided
         if labels:
-            for addr, label in labels.items():
-                db.add_label(addr, label)
+            for addr, lab in labels.items():
+                db.add_label(addr, lab)
 
         # Determine addresses to disassemble
         pending_addresses = []
         discovered_targets = set()
         if code_ranges:
-            for start, end in code_ranges:
+            for start, _ in code_ranges:
                 pending_addresses.append(start)
         elif labels:
             # Use label addresses as entry points for flow-following
@@ -280,7 +285,9 @@ class Native6502Disassembler(IDisassembler):
             vec_offset = len(prg_data) - 6
             if vec_offset >= 0:
                 for i in range(3):
-                    vec_addr = prg_data[vec_offset + i * 2] | (prg_data[vec_offset + i * 2 + 1] << 8)
+                    vec_addr = prg_data[vec_offset + i * 2] | (
+                        prg_data[vec_offset + i * 2 + 1] << 8
+                    )
                     if start_addr <= vec_addr < end_addr:
                         pending_addresses.append(vec_addr)
             if not pending_addresses:
@@ -291,7 +298,7 @@ class Native6502Disassembler(IDisassembler):
             addr = pending_addresses.pop(0)
             if addr in db.instructions or addr in processed_addresses:
                 continue
-            
+
             offset = addr - start_addr
             if offset < 0 or offset >= len(prg_data):
                 continue
@@ -299,7 +306,7 @@ class Native6502Disassembler(IDisassembler):
             # Get opcode
             opcode = prg_data[offset]
             size = self.SIZE_TABLE[opcode]
-            
+
             # Use size 1 for unknowns or if it would exceed ROM
             if size == 0 or offset + size > len(prg_data):
                 size = 1

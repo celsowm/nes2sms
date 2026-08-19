@@ -1,12 +1,12 @@
 """CLI commands."""
 
-from .ingest import cmd_ingest
 from .analyze_mapper import cmd_analyze_mapper
-from .convert_gfx import cmd_convert_gfx
-from .convert_audio import cmd_convert_audio
-from .generate import cmd_generate
-from .build import cmd_build
 from .bootstrap_hello import cmd_bootstrap_hello
+from .build import cmd_build
+from .convert_audio import cmd_convert_audio
+from .convert_gfx import cmd_convert_gfx
+from .generate import cmd_generate
+from .ingest import cmd_ingest
 
 __all__ = [
     "cmd_ingest",

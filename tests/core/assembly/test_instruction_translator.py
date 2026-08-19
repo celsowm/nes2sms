@@ -1,13 +1,7 @@
 """Tests for 6502 to Z80 instruction translator."""
 
-import pytest
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
 from nes2sms.core.assembly.instruction_translator import InstructionTranslator
-from nes2sms.core.assembly.registers import FlagMapping, RegisterMapping, CallingConvention
+from nes2sms.core.assembly.registers import CallingConvention, FlagMapping, RegisterMapping
 
 
 class TestRegisterMapping:

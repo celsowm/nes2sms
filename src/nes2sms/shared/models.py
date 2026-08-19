@@ -1,7 +1,6 @@
 """Shared models and constants."""
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
 
 
 @dataclass
@@ -28,8 +27,8 @@ class Symbol:
     address: int
     bank: int
     type: str  # 'code', 'data', 'pointer'
-    comment: Optional[str] = None
-    disassembly_snippet: Optional[str] = None
+    comment: str | None = None
+    disassembly_snippet: str | None = None
     is_embedded: bool = False
 
 
@@ -46,10 +45,10 @@ class BankMapping:
 class TileConversionResult:
     """Result of tile conversion."""
 
-    sms_tiles: List[bytes]
-    flip_index: Dict
-    warnings: List[str] = field(default_factory=list)
-    tile_metadata: List[Dict] = field(default_factory=list)
+    sms_tiles: list[bytes]
+    flip_index: dict
+    warnings: list[str] = field(default_factory=list)
+    tile_metadata: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -57,8 +56,8 @@ class ConversionManifest:
     """Main manifest for conversion state."""
 
     source_hash_sha256: str
-    nes_header: Dict
-    vectors: Dict
-    conversion_state: Dict = field(default_factory=dict)
-    sms_assets: Dict = field(default_factory=dict)
-    warnings: List[str] = field(default_factory=list)
+    nes_header: dict
+    vectors: dict
+    conversion_state: dict = field(default_factory=dict)
+    sms_assets: dict = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)

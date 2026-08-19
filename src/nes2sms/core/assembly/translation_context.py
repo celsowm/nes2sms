@@ -1,7 +1,6 @@
 """Translation context for maintaining state during 6502 to Z80 translation."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 @dataclass
@@ -13,17 +12,17 @@ class TranslationContext:
     """
 
     current_function: str = ""
-    local_labels: Dict[str, str] = field(default_factory=dict)  # 6502 -> Z80
-    register_map: Dict[str, str] = field(
+    local_labels: dict[str, str] = field(default_factory=dict)  # 6502 -> Z80
+    register_map: dict[str, str] = field(
         default_factory=lambda: {
             "A": "a",
             "X": "b",
             "Y": "c",
         }
     )
-    loop_labels: Dict[int, str] = field(default_factory=dict)  # addr -> label
-    subroutine_stack: List[str] = field(default_factory=list)
-    translated_code: List[str] = field(default_factory=list)
+    loop_labels: dict[int, str] = field(default_factory=dict)  # addr -> label
+    subroutine_stack: list[str] = field(default_factory=list)
+    translated_code: list[str] = field(default_factory=list)
     temp_counter: int = 0
     in_loop: bool = False
     loop_depth: int = 0

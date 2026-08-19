@@ -1,10 +1,9 @@
 """Ingest command: Load NES ROM and extract data."""
 
-import json
 from pathlib import Path
 
-from ...infrastructure.rom_loader import RomLoader
 from ...infrastructure.asset_writer import AssetWriter
+from ...infrastructure.rom_loader import RomLoader
 from ...infrastructure.symbol_extractor import StaticSymbolExtractor
 
 

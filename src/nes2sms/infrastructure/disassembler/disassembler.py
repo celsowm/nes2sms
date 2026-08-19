@@ -1,16 +1,15 @@
 """da65 disassembler implementation - Implements IDisassembler interface."""
 
 from pathlib import Path
-from typing import Optional, Dict, List
 
 from ...core.interfaces.i_disassembler import (
-    IDisassembler,
-    DisassemblyResult,
     DisassemblyDatabase,
+    DisassemblyResult,
+    IDisassembler,
 )
-from .da65_wrapper import Da65Wrapper
 from .da65_output_parser import Da65OutputParser
-from .info_file_generator import InfoFileGenerator, CodeRange, Label, InfoFileOptions
+from .da65_wrapper import Da65Wrapper
+from .info_file_generator import CodeRange, InfoFileGenerator, InfoFileOptions, Label
 
 
 class Da65Disassembler(IDisassembler):
@@ -23,7 +22,7 @@ class Da65Disassembler(IDisassembler):
 
     def __init__(
         self,
-        da65_path: Optional[Path] = None,
+        da65_path: Path | None = None,
         cpu: str = "6502",
         multi_pass: bool = True,
     ):
@@ -48,9 +47,9 @@ class Da65Disassembler(IDisassembler):
         self,
         prg_data: bytes,
         start_addr: int = 0x8000,
-        cpu: Optional[str] = None,
-        labels: Optional[Dict[int, str]] = None,
-        code_ranges: Optional[List[tuple]] = None,
+        cpu: str | None = None,
+        labels: dict[int, str] | None = None,
+        code_ranges: list[tuple] | None = None,
     ) -> DisassemblyResult:
         """
         Disassemble PRG data using da65.
@@ -68,7 +67,7 @@ class Da65Disassembler(IDisassembler):
         cpu = cpu or self.cpu
 
         # Generate info file if labels or ranges provided
-        info_file: Optional[Path] = None
+        info_file: Path | None = None
 
         if labels or code_ranges:
             info_file = self._generate_info_file(
@@ -103,8 +102,8 @@ class Da65Disassembler(IDisassembler):
 
     def _generate_info_file(
         self,
-        labels: Optional[Dict[int, str]],
-        code_ranges: Optional[List[tuple]],
+        labels: dict[int, str] | None,
+        code_ranges: list[tuple] | None,
         start_addr: int,
         cpu: str,
     ) -> Path:
@@ -158,7 +157,7 @@ class Da65Disassembler(IDisassembler):
         prg_data: bytes,
         function_addr: int,
         start_addr: int = 0x8000,
-        cpu: Optional[str] = None,
+        cpu: str | None = None,
     ) -> DisassemblyResult:
         """
         Disassemble a single function.

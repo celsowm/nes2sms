@@ -1,7 +1,6 @@
 """da65 output parser - Converts disassembler output to structured data."""
 
 import re
-from typing import List, Dict, Optional, Tuple
 
 from ...core.interfaces.i_disassembler import (
     DisassemblyDatabase,
@@ -55,8 +54,8 @@ class Da65OutputParser:
         db = DisassemblyDatabase()
 
         lines = output.split("\n")
-        current_label: Optional[str] = None
-        current_comment: Optional[str] = None
+        current_label: str | None = None
+        current_comment: str | None = None
 
         i = 0
         while i < len(lines):
@@ -149,7 +148,7 @@ class Da65OutputParser:
 
         return db
 
-    def _parse_operands(self, operands_str: str) -> List[str]:
+    def _parse_operands(self, operands_str: str) -> list[str]:
         """Parse operand string into list."""
         if not operands_str:
             return []
@@ -182,7 +181,7 @@ class Da65OutputParser:
 
         return operands
 
-    def _identify_code_ranges(self, db: DisassemblyDatabase) -> List[Tuple[int, int]]:
+    def _identify_code_ranges(self, db: DisassemblyDatabase) -> list[tuple[int, int]]:
         """Identify contiguous code ranges."""
         if not db.instructions:
             return []
@@ -210,7 +209,7 @@ class Da65OutputParser:
 
     def parse_function(
         self, output: str, start_addr: int, max_instructions: int = 200
-    ) -> List[ParsedInstruction]:
+    ) -> list[ParsedInstruction]:
         """
         Parse a single function from da65 output.
 

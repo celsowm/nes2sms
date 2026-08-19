@@ -1,11 +1,5 @@
 """Tests for static symbol extractor."""
 
-import pytest
-from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
 from nes2sms.infrastructure.symbol_extractor import StaticSymbolExtractor
 
 
@@ -80,7 +74,7 @@ class TestStaticSymbolExtractor:
         prg_data[0x3FFF] = 0x80
 
         extractor = StaticSymbolExtractor(bytes(prg_data), base_address=0x8000)
-        symbols = extractor.extract()
+        extractor.extract()
 
         # Should have visited the RESET handler
         assert len(extractor.visited) >= 1

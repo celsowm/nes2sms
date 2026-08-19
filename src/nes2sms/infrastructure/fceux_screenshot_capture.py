@@ -7,9 +7,9 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .fceux_runtime_capture import (
+    BM_CLICK,
     LUA_WINDOW_TITLE,
     RUN_BUTTON_ID,
     SCRIPT_PATH_EDIT_ID,
@@ -19,6 +19,7 @@ from .fceux_runtime_capture import (
     _resolve_fceux_path,
     _set_window_text,
     _terminate_process_tree,
+    _user32,
     _wait_for_main_window,
     _wait_for_window_title,
 )
@@ -32,7 +33,7 @@ class FceuxScreenshotCaptureConfig:
     output_dir: Path
     capture_frame: int = 120
     timeout_seconds: int = 30
-    emulator_path: Optional[str] = None
+    emulator_path: str | None = None
 
 
 def capture_reference_frame(config: FceuxScreenshotCaptureConfig) -> Path:
@@ -56,7 +57,6 @@ def capture_reference_frame(config: FceuxScreenshotCaptureConfig) -> Path:
     )
 
     import subprocess
-    import time
 
     proc = subprocess.Popen([str(emulator_path), str(config.nes_path)])
     try:
@@ -66,9 +66,8 @@ def capture_reference_frame(config: FceuxScreenshotCaptureConfig) -> Path:
         script_edit = _find_dialog_control(lua_window, SCRIPT_PATH_EDIT_ID)
         run_button = _find_dialog_control(lua_window, RUN_BUTTON_ID)
         _set_window_text(script_edit, str(script_path))
-        from .fceux_runtime_capture import BM_CLICK, user32
 
-        user32.SendMessageW(run_button, BM_CLICK, 0, 0)
+        _user32().SendMessageW(run_button, BM_CLICK, 0, 0)
         _wait_for_output_files(raw_gd_path, ready_path, timeout_seconds=config.timeout_seconds)
     finally:
         _terminate_process_tree(proc)
