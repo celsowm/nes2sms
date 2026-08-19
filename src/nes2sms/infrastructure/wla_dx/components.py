@@ -376,12 +376,10 @@ class WlaDxMapperHal(IHalComponent):
         .section "Mapper_HAL" FREE
 
         Mapper_Init:
-            ld   a, 0
-            ld   ($FFFD), a
             ld   a, 1
-            ld   ($FFFE), a
+            ld   ($FFFD), a
             ld   a, 2
-            ld   ($FFFF), a
+            ld   ($FFFE), a
             ret
 
         Mapper_SetSlot1:

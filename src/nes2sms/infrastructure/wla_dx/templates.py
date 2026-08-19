@@ -408,13 +408,10 @@ HAL_MAPPER_ASM = """
 .export Mapper_SetBank
 
 Mapper_Init:
-    xor  a
-    ld   ($FFFC), a
+    ld   a, 1
     ld   ($FFFD), a
-    inc  a
+    ld   a, 2
     ld   ($FFFE), a
-    inc  a
-    ld   ($FFFF), a
     ret
 
 Mapper_SetBank:
